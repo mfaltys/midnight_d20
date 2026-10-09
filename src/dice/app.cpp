@@ -22,15 +22,18 @@ enum class State : uint8_t {
 };
 
 State s_state = State::SLEEP;
-uint8_t s_dieIndex = 0;      // selection slot, 0 = d2
+uint8_t s_dieIndex = 0;      // selection slot, 0 = d2; kept in RAM across sleep
 uint8_t s_result = 0;        // last rolled value (1..12)
+// Die index captured just before the most recent short press, so that a
+// double-click can roll back the die change its first click already made.
+uint8_t s_dieBeforeShortPress = 0;
 uint32_t s_lastActivityMs = 0;
 uint32_t s_stateEnteredMs = 0;
 uint32_t s_lastChaseStepMs = 0;
 uint8_t s_chaseIndex = 0;
 uint32_t s_statusPulseUntilMs = 0;
 
-void enterSelectDie(bool resetSelection);
+void enterSelectDie();
 void enterRolling(uint32_t now);
 void enterShowResult(uint32_t now);
 void enterSleep();
@@ -65,16 +68,15 @@ void sleepUntilWake() {
   sei();
 
   charlieplex::begin();  // refresh timer back on (all LEDs still dark)
-  enterSelectDie(true);  // every wake starts the sequence at d2
+  // SRAM is retained through power-down and waking is not a reset, so the die the
+  // user was last using is still in s_dieIndex: wake up on it rather than on d2.
+  enterSelectDie();
 }
 
 // ---------------------------------------------------------------------------
 // SELECT_DIE
 // ---------------------------------------------------------------------------
-void enterSelectDie(bool resetSelection) {
-  if (resetSelection) {
-    s_dieIndex = 0;
-  }
+void enterSelectDie() {
   s_lastActivityMs = millis();
   s_state = State::SELECT_DIE;
 }
@@ -134,7 +136,7 @@ void enterShowResult(uint32_t now) {
 
 void updateShowResult(uint32_t now, button::Event ev) {
   if (ev == button::Event::SHORT_PRESS) {
-    enterSelectDie(false);  // keep the die that is selected, back to choosing
+    enterSelectDie();  // keep the die that is selected, back to choosing
     return;
   }
   if (ev == button::Event::LONG_PRESS) {
@@ -186,10 +188,19 @@ void update() {
     s_lastActivityMs = now;  // any interaction resets the inactivity timer
   }
 
+  if (ev == button::Event::SHORT_PRESS) {
+    // Remember the die as it was before this click. If a second click completes a
+    // double-click the pair powers the device off, and this click's effect (the
+    // die advance) is rolled back so the device wakes on the die the user chose.
+    s_dieBeforeShortPress = s_dieIndex;
+  }
+
   if (ev == button::Event::DOUBLE_CLICK) {
     // Double-click powers the device off from any active state, without waiting
-    // for the inactivity timeout. The first click of the pair has already done
-    // its normal job (the die advanced, or SHOW_RESULT returned to SELECT_DIE).
+    // for the inactivity timeout. The first click of the pair already advanced the
+    // die (or bounced SHOW_RESULT back to SELECT_DIE), so undo the die change
+    // before powering down and the remembered die stays correct.
+    s_dieIndex = s_dieBeforeShortPress;
     enterSleep();
     return;
   }

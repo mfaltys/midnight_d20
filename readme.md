@@ -27,8 +27,6 @@
 | D12 | PA4 | PA2 |
 | D13 (status) | PA2 | PA5 |
 
-These mappings are intentional. D8 and D13 use different pin pairs and must be treated as separate LEDs.
-
 ## Supported Dice
 
 Support the following dice, cycled in this order:
@@ -56,7 +54,8 @@ The button is active-low on PA6.
 - A long press is recognized after approximately 600 ms of continuous press.
 - A double-click (a second short press released within approximately 300 ms of
   the first) powers the device off. The first press still performs its normal
-  action; the second press powers off instead of acting again.
+  action, but the die change it made is rolled back when the double-click
+  completes; the second press powers off instead of acting again.
 - Do not use blocking delays for button handling.
 - Ensure one physical press generates no more than one action.
 - A long press must not also trigger a short-press action when released.
@@ -72,7 +71,7 @@ Implement the application as a nonblocking state machine with these states:
 - PA6 must wake the device when the button is pressed.
 - Entered on power-up, after the inactivity timeout, or immediately on a
   double-click.
-- On wake, enter SELECT_DIE.
+- On wake, enter SELECT_DIE on the previously selected die.
 
 ### 2. SELECT_DIE
 
@@ -89,7 +88,9 @@ Implement the application as a nonblocking state machine with these states:
 - A long press of approximately 600 ms confirms the selected die and starts a roll.
 - Stop the status LED selection blink when rolling begins.
 
-Use the same six-die sequence every time the device wakes, starting at d2 for the initial firmware revision. Preserve the selection in RAM during a single powered session if appropriate.
+The selected die is kept in RAM, which survives the power-down sleep, so the
+device wakes up on the die the user was last using. A true power cycle (cell
+removed) starts the sequence at d2 for the initial firmware revision.
 
 ### 3. ROLLING
 
@@ -145,7 +146,9 @@ Implement a lightweight PRNG suitable for the ATtiny1614.
   without waiting for the timeout.
 - Disable unnecessary peripherals and timers during sleep.
 - Ensure the button wake-up configuration is compatible with the selected sleep mode.
-- Avoid EEPROM writes for selection state in this revision.
+- Avoid EEPROM writes for selection state in this revision: the selection lives
+  in RAM, which survives the power-down sleep and is only lost on a true power
+  cycle (cell removed).
 
 ## Implementation Requirements
 
@@ -252,10 +255,14 @@ Details that are easy to get wrong and are handled explicitly:
   never be lost to a missed edge.
 - A double-click powers off from any active state (LEDs off, power-down) without
   waiting for the timeout. Detection is not deferred, so the first click of the
-  pair has already been applied; a click followed by a long hold is a long press,
-  never a double-click.
-- Every wake restarts the sequence at d2. A short press from SHOW_RESULT returns
-  to SELECT_DIE with the same die still selected.
+  pair is applied at once, but its die change is rolled back when the double-click
+  completes - so the device powers off, and wakes, on the die the user had
+  actually chosen. A click followed by a long hold is a long press, never a
+  double-click.
+- Waking returns to SELECT_DIE on the die the user was last using: the selection
+  lives in RAM, which survives the power-down sleep and is not reset on wake (a
+  true power cycle restarts at d2). A short press from SHOW_RESULT returns to
+  SELECT_DIE with the same die still selected.
 - The inactivity timeout applies in SELECT_DIE as well, so a forgotten blinking
   device still goes to sleep instead of draining the cell.
 
@@ -294,6 +301,13 @@ released within `DOUBLE_CLICK_MS` (300 ms) of the previous one is reported as
 short press is still reported on release and the first click of a double-click has
 already acted. `armWake()` enables the falling-edge pin interrupt that wakes the
 MCU from power-down and marks the next press as absorbed.
+
+Because waking from power-down is not a reset, the application's state lives on in
+SRAM: `app.cpp` simply does not reset `s_dieIndex` when it re-enters `SELECT_DIE`,
+so the device wakes on the die it was last using. `update()` captures the die
+index before every short press and restores it if that press turns out to be the
+first half of a double-click, so the power-off gesture cannot leave the remembered
+die one step off.
 
 `button.cpp` owns `ISR(PORTA_PORT_vect)` directly. PlatformIO's atmelmegaavr
 Arduino framework defines `CORE_ATTACH_ALL`, which suppresses the core's
