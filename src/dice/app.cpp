@@ -34,6 +34,7 @@ uint32_t s_lastActivityMs = 0;
 uint32_t s_stateEnteredMs = 0;
 uint32_t s_lastChaseStepMs = 0;
 uint8_t s_chaseIndex = 0;
+bool s_rollReleasing = false;  // button released: finish the lap, then roll
 uint8_t s_spiralStep = 0;    // step counter for any spiral flourish
 uint32_t s_statusPulseUntilMs = 0;
 
@@ -176,23 +177,31 @@ void enterRolling(uint32_t now) {
   s_stateEnteredMs = now;
   s_lastChaseStepMs = now;
   s_chaseIndex = 0;
+  s_rollReleasing = false;
   showPattern(1u << 0, false);  // the chase starts at D1
 }
 
 void updateRolling(uint32_t now) {
-  if ((uint32_t)(now - s_stateEnteredMs) >= ROLL_ANIMATION_MS) {
-    // The chase is over: roll, then either celebrate a perfect 20 or reveal.
-    s_result = prng::roll(dice::sidesAt(s_dieIndex));
-    if (isCrit()) {
-      enterCrit(now);
-    } else {
-      enterShowResult(now);
-    }
-    return;
+  // The chase loops for as long as the button is held. Releasing does not stop it
+  // immediately: the chase always finishes the revolution it is in (all the way
+  // back round to D1) before the die is rolled, so the result never appears
+  // mid-circle however long the user wound the roll up for.
+  if (!s_rollReleasing && !button::isDown()) {
+    s_rollReleasing = true;
   }
   if ((uint32_t)(now - s_lastChaseStepMs) >= ROLL_CHASE_STEP_MS) {
     s_lastChaseStepMs = now;
     s_chaseIndex = static_cast<uint8_t>((s_chaseIndex + 1) % charlieplex::PERIMETER_COUNT);
+    if (s_rollReleasing && s_chaseIndex == 0) {
+      // Back at D1: the revolution is complete, so roll the die now.
+      s_result = prng::roll(dice::sidesAt(s_dieIndex));
+      if (isCrit()) {
+        enterCrit(now);  // a perfect 20 celebrates first
+      } else {
+        enterShowResult(now);
+      }
+      return;
+    }
     showPattern(1u << s_chaseIndex, false);
   }
 }

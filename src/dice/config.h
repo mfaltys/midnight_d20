@@ -14,9 +14,9 @@
 constexpr uint16_t STATUS_BLINK_HALF_MS = 250;
 
 // Rolling animation: a clockwise chase around D1..D12 that advances every
-// ROLL_CHASE_STEP_MS and stops after ROLL_ANIMATION_MS (about one and a bit
-// laps of the perimeter).
-constexpr uint16_t ROLL_ANIMATION_MS = 800;
+// ROLL_CHASE_STEP_MS. The chase loops for as long as the roll button is held and
+// then always finishes the revolution it is in after release, so a roll lasts the
+// hold time plus at most one lap of the perimeter.
 constexpr uint16_t ROLL_CHASE_STEP_MS = 60;
 
 // Spiral flourish: a rotating arc whose trail grows (or shrinks) a LED at a time

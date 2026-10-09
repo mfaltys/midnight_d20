@@ -115,9 +115,14 @@ When a roll starts:
 
 1. Clear the previous result.
 2. Run a clockwise chase animation around D1–D12.
-3. Keep the animation fast and brief, initially approximately 600–1000 ms.
-4. Stop the animation cleanly and display the newly generated result.
-5. Use nonblocking timing so the MCU is not held in long delays.
+3. Keep looping the chase for as long as the user holds the button, so the roll
+   can be wound up for as long as they like.
+4. When the button is released, still finish the revolution the chase is in - all
+   the way back round to D1 - before rolling, so the result never appears
+   mid-circle. Releasing at D12 costs one step; releasing at D1 costs a full lap.
+5. Roll the die once that revolution is complete, stop the animation cleanly and
+   display the newly generated result.
+6. Use nonblocking timing so the MCU is not held in long delays.
 
 The chase should illuminate one perimeter LED at a time, advancing D1, D2, D3, and so on through D12 before repeating as needed for the animation duration.
 
@@ -267,7 +272,7 @@ detector to save CR2032 sleep current.
                                             |    ROLLING     |
                                             | D1..D12 chase  |
                                             +--------+-------+
-                                                     | animation done: roll()
+                                                     | released: finish lap, roll()
                                                      v
                                             +----------------+
                                             |      CRIT      |  a perfect 20
@@ -294,8 +299,8 @@ detector to save CR2032 sleep current.
 | POWER_ON -> SELECT_DIE | flourish finished | 450 ms spiral, 30 ms per step, D13 strobing |
 | SELECT_DIE: next die | short press | on release, < 600 ms |
 | SELECT_DIE -> ROLLING | long press | 600 ms of continuous press |
-| ROLLING -> SHOW_RESULT | animation finished (not a perfect 20) | 800 ms, 60 ms per chase step |
-| ROLLING -> CRIT | a perfect 20 (d20 = 20) after the chase | immediately |
+| ROLLING -> SHOW_RESULT | button released, chase finished its revolution, not a perfect 20 | up to one lap (60 ms per chase step) after release |
+| ROLLING -> CRIT | button released, chase finished its revolution, a perfect 20 (d20 = 20) | up to one lap (60 ms per chase step) after release |
 | CRIT -> SHOW_RESULT | flourish finished | 900 ms spiral, 30 ms per step, D13 strobing |
 | SHOW_RESULT -> SELECT_DIE | short press | on release |
 | SHOW_RESULT -> ROLLING | long press (same die) | 600 ms of continuous press |
@@ -323,6 +328,9 @@ Details that are easy to get wrong and are handled explicitly:
   from SHOW_RESULT returns to SELECT_DIE with the same die still selected.
 - The inactivity timeout applies in SELECT_DIE as well, so a forgotten blinking
   device still goes to sleep instead of draining the cell.
+- ROLLING keeps the chase looping for as long as the button is held, and after
+  release it still finishes the revolution it is in (back round to D1) before
+  rolling, so the result never appears mid-circle no matter where the user lets go.
 - A perfect 20 on the d20 detours through CRIT before the 20 is revealed; no other
   result does. POWER_ON, POWER_OFF and CRIT all share one spiral animation
   (`spiralFrame`): a rotating arc that grows to fill the ring (power-on, crit) or
