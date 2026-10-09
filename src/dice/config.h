@@ -39,7 +39,7 @@ constexpr uint8_t POWER_TAIL_GROW_STEPS = 1;
 // Short D13 confirmation pulse once a result is finalised.
 constexpr uint16_t RESULT_PULSE_MS = 120;
 
-// Inactivity timeout: LEDs off and power-down sleep (readme.md asks for 30-60 s).
+// Inactivity timeout: LEDs off and power-down sleep (spec.md asks for 30-60 s).
 constexpr uint32_t INACTIVITY_TIMEOUT_MS = 45000;
 
 #endif  // CONFIG_H

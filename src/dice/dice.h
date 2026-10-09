@@ -3,7 +3,7 @@
  *
  * Supported dice and the order the user cycles through them: d2, d4, d6, d8,
  * d10, d12, d20, then back to d2. d100 is deliberately not implemented in this
- * revision (readme.md).
+ * revision (spec.md).
  */
 #ifndef DICE_H
 #define DICE_H

@@ -16,7 +16,7 @@ constexpr uint8_t PA4 = 1 << 4;
 constexpr uint8_t PA5 = 1 << 5;
 constexpr uint8_t BUS_MASK = PA1 | PA2 | PA3 | PA4 | PA5;
 
-// Exact LED mapping from readme.md (anode = source/high, cathode = sink/low).
+// Exact LED mapping from spec.md (anode = source/high, cathode = sink/low).
 struct LedDef {
   uint8_t anode;
   uint8_t cathode;
