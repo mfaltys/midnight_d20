@@ -16,10 +16,12 @@ namespace {
 
 enum class State : uint8_t {
   SLEEP,        // LEDs off, MCU in power-down until the button is pressed
+  POWER_ON,     // wake flourish (the spiral winds up) before SELECT_DIE
   SELECT_DIE,   // D13 blinks, the chosen die is shown on D1..D12
   ROLLING,      // clockwise chase animation
   CRIT,         // d20 landed on 20: fast spiral + D13 strobe before the result
   SHOW_RESULT,  // the rolled value on D1..D12 until the next interaction
+  POWER_OFF,    // wind-down flourish (the spiral collapses) before sleeping
 };
 
 State s_state = State::SLEEP;
@@ -32,21 +34,48 @@ uint32_t s_lastActivityMs = 0;
 uint32_t s_stateEnteredMs = 0;
 uint32_t s_lastChaseStepMs = 0;
 uint8_t s_chaseIndex = 0;
-uint8_t s_critStep = 0;      // spiral step during the CRIT flourish
+uint8_t s_spiralStep = 0;    // step counter for any spiral flourish
 uint32_t s_statusPulseUntilMs = 0;
 
+void enterPowerOn(uint32_t now);
 void enterSelectDie();
 void enterRolling(uint32_t now);
 void enterCrit(uint32_t now);
 void enterShowResult(uint32_t now);
-void enterSleep();
+void enterPowerOff(uint32_t now);
 void sleepUntilWake();
 void showPattern(uint16_t mask, bool statusOn);
 
 // True when the die just rolled is a d20 showing its maximum (a "perfect 20").
 bool isCrit();
-// Contiguous arc of `length` perimeter LEDs starting at `start`, wrapping.
-uint16_t arcMask(uint8_t start, uint8_t length);
+
+// ---------------------------------------------------------------------------
+// Spiral flourish (shared by POWER_ON, POWER_OFF and CRIT)
+// ---------------------------------------------------------------------------
+uint16_t arcMask(uint8_t start, uint8_t length) {
+  uint16_t mask = 0;
+  for (uint8_t i = 0; i < length; i++) {
+    mask |= static_cast<uint16_t>(1u << ((start + i) % charlieplex::PERIMETER_COUNT));
+  }
+  return mask;
+}
+
+// One frame of a spiral flourish. `step` counts spiral steps and the trail grows
+// one LED every `growDivisor` steps; `grow` winds the arc outward to fill the
+// ring, otherwise it collapses to nothing. D13 strobes throughout.
+void spiralFrame(uint32_t now, uint8_t step, uint8_t growDivisor, bool grow) {
+  const uint8_t count = charlieplex::PERIMETER_COUNT;
+  const uint8_t span = static_cast<uint8_t>(1u + step / growDivisor);
+  uint8_t trail;
+  if (grow) {
+    trail = (span > count) ? count : span;
+  } else {
+    trail = (span > count) ? 0 : static_cast<uint8_t>(count - span + 1u);
+  }
+  const uint8_t head = static_cast<uint8_t>(step % count);
+  const bool strobeOn = ((now / SPIRAL_STROBE_HALF_MS) & 1u) == 0u;
+  showPattern(arcMask(head, trail), strobeOn);
+}
 
 // ---------------------------------------------------------------------------
 // SLEEP
@@ -78,7 +107,30 @@ void sleepUntilWake() {
   charlieplex::begin();  // refresh timer back on (all LEDs still dark)
   // SRAM is retained through power-down and waking is not a reset, so the die the
   // user was last using is still in s_dieIndex: wake up on it rather than on d2.
-  enterSelectDie();
+  enterPowerOn(millis());
+}
+
+// ---------------------------------------------------------------------------
+// POWER_ON (the wake flourish)
+// ---------------------------------------------------------------------------
+void enterPowerOn(uint32_t now) {
+  s_state = State::POWER_ON;
+  s_stateEnteredMs = now;
+  s_lastChaseStepMs = now;
+  s_spiralStep = 0;
+  showPattern(1u << 0, false);  // the spiral starts at D1
+}
+
+void updatePowerOn(uint32_t now) {
+  if ((uint32_t)(now - s_stateEnteredMs) >= POWER_ON_MS) {
+    enterSelectDie();  // the device is on: let the user pick a die
+    return;
+  }
+  if ((uint32_t)(now - s_lastChaseStepMs) >= SPIRAL_STEP_MS) {
+    s_lastChaseStepMs = now;
+    s_spiralStep++;
+  }
+  spiralFrame(now, s_spiralStep, POWER_TAIL_GROW_STEPS, true);
 }
 
 // ---------------------------------------------------------------------------
@@ -110,7 +162,7 @@ void updateSelectDie(uint32_t now, button::Event ev) {
   showPattern(mask, blinkOn);
 
   if ((uint32_t)(now - s_lastActivityMs) >= INACTIVITY_TIMEOUT_MS) {
-    s_state = State::SLEEP;
+    enterPowerOff(now);  // wind down, then sleep
   }
 }
 
@@ -153,19 +205,11 @@ bool isCrit() {
   return sides == dice::MAX_VALUE && s_result == sides;  // a perfect 20
 }
 
-uint16_t arcMask(uint8_t start, uint8_t length) {
-  uint16_t mask = 0;
-  for (uint8_t i = 0; i < length; i++) {
-    mask |= static_cast<uint16_t>(1u << ((start + i) % charlieplex::PERIMETER_COUNT));
-  }
-  return mask;
-}
-
 void enterCrit(uint32_t now) {
   s_state = State::CRIT;
   s_stateEnteredMs = now;
   s_lastChaseStepMs = now;
-  s_critStep = 0;
+  s_spiralStep = 0;
   showPattern(1u << 0, false);  // the spiral starts at D1
 }
 
@@ -174,19 +218,11 @@ void updateCrit(uint32_t now) {
     enterShowResult(now);
     return;
   }
-  if ((uint32_t)(now - s_lastChaseStepMs) >= CRIT_SPIRAL_STEP_MS) {
+  if ((uint32_t)(now - s_lastChaseStepMs) >= SPIRAL_STEP_MS) {
     s_lastChaseStepMs = now;
-    s_critStep++;
+    s_spiralStep++;
   }
-  // A fast spiral: a rotating arc whose trail grows one LED at a time until the
-  // whole ring is lit, while D13 strobes on its own, faster period.
-  const uint8_t head = static_cast<uint8_t>(s_critStep % charlieplex::PERIMETER_COUNT);
-  uint8_t trail = static_cast<uint8_t>(1u + s_critStep / CRIT_TAIL_GROW_STEPS);
-  if (trail > charlieplex::PERIMETER_COUNT) {
-    trail = charlieplex::PERIMETER_COUNT;
-  }
-  const bool strobeOn = ((now / CRIT_STROBE_HALF_MS) & 1u) == 0u;
-  showPattern(arcMask(head, trail), strobeOn);
+  spiralFrame(now, s_spiralStep, CRIT_TAIL_GROW_STEPS, true);
 }
 
 // ---------------------------------------------------------------------------
@@ -220,20 +256,36 @@ void updateShowResult(uint32_t now, button::Event ev) {
   showPattern(d.perimeterMask, d.statusOn || pulseActive);
 
   if ((uint32_t)(now - s_lastActivityMs) >= INACTIVITY_TIMEOUT_MS) {
-    s_state = State::SLEEP;
+    enterPowerOff(now);  // wind down, then sleep
   }
+}
+
+// ---------------------------------------------------------------------------
+// POWER_OFF (the wind-down flourish, then sleep)
+// ---------------------------------------------------------------------------
+void enterPowerOff(uint32_t now) {
+  s_state = State::POWER_OFF;
+  s_stateEnteredMs = now;
+  s_lastChaseStepMs = now;
+  s_spiralStep = 0;
+  showPattern(charlieplex::ALL_PERIMETER, false);  // the spiral starts full
+}
+
+void updatePowerOff(uint32_t now) {
+  if ((uint32_t)(now - s_stateEnteredMs) >= POWER_OFF_MS) {
+    s_state = State::SLEEP;  // next update() darkens and parks the MCU
+    return;
+  }
+  if ((uint32_t)(now - s_lastChaseStepMs) >= SPIRAL_STEP_MS) {
+    s_lastChaseStepMs = now;
+    s_spiralStep++;
+  }
+  spiralFrame(now, s_spiralStep, POWER_TAIL_GROW_STEPS, false);
 }
 
 // ---------------------------------------------------------------------------
 // Shared
 // ---------------------------------------------------------------------------
-void enterSleep() {
-  // Power off now: dark immediately, then the next update() stops the refresh
-  // timer and parks the MCU in the same power-down sleep as the timeout.
-  charlieplex::off();
-  s_state = State::SLEEP;
-}
-
 void showPattern(uint16_t mask, bool statusOn) {
   charlieplex::setPattern(mask, statusOn);  // the driver drops redundant updates
 }
@@ -273,11 +325,14 @@ void update() {
     // die (or bounced SHOW_RESULT back to SELECT_DIE), so undo the die change
     // before powering down and the remembered die stays correct.
     s_dieIndex = s_dieBeforeShortPress;
-    enterSleep();
+    enterPowerOff(now);
     return;
   }
 
   switch (s_state) {
+    case State::POWER_ON:
+      updatePowerOn(now);
+      break;
     case State::SELECT_DIE:
       updateSelectDie(now, ev);
       break;
@@ -289,6 +344,9 @@ void update() {
       break;
     case State::SHOW_RESULT:
       updateShowResult(now, ev);
+      break;
+    case State::POWER_OFF:
+      updatePowerOff(now);
       break;
     case State::SLEEP:
       break;  // handled above

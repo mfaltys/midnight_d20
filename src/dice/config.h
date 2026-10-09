@@ -19,13 +19,22 @@ constexpr uint16_t STATUS_BLINK_HALF_MS = 250;
 constexpr uint16_t ROLL_ANIMATION_MS = 800;
 constexpr uint16_t ROLL_CHASE_STEP_MS = 60;
 
-// Crit flourish for a perfect 20 on the d20: a fast spiral around the perimeter
-// (a rotating arc whose trail grows a LED at a time until the ring is full)
-// while D13 strobes, played before the result is revealed.
+// Spiral flourish: a rotating arc whose trail grows (or shrinks) a LED at a time
+// while D13 strobes. Shared by the crit celebration and the power-on / power-off
+// animations. One spiral step lasts SPIRAL_STEP_MS.
+constexpr uint16_t SPIRAL_STEP_MS = 30;
+constexpr uint16_t SPIRAL_STROBE_HALF_MS = 50;  // D13 strobe half-period (~10 Hz)
+
+// Crit flourish for a perfect 20 on the d20: the spiral winds outward, adding a
+// trail LED every CRIT_TAIL_GROW_STEPS steps, then reveals the result.
 constexpr uint16_t CRIT_ANIMATION_MS = 900;
-constexpr uint16_t CRIT_SPIRAL_STEP_MS = 30;
-constexpr uint8_t CRIT_TAIL_GROW_STEPS = 2;   // spiral steps per extra trail LED
-constexpr uint16_t CRIT_STROBE_HALF_MS = 50;  // D13 strobe half-period (~10 Hz)
+constexpr uint8_t CRIT_TAIL_GROW_STEPS = 2;
+
+// Power-on / power-off flourishes: the same spiral, outward on wake and inward on
+// the way to sleep, kept short so the device feels snappy.
+constexpr uint16_t POWER_ON_MS = 450;
+constexpr uint16_t POWER_OFF_MS = 450;
+constexpr uint8_t POWER_TAIL_GROW_STEPS = 1;
 
 // Short D13 confirmation pulse once a result is finalised.
 constexpr uint16_t RESULT_PULSE_MS = 120;

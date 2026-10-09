@@ -58,7 +58,8 @@ The button is active-low on PA6.
 - A double-click (a second short press released within approximately 300 ms of
   the first) powers the device off. The first press still performs its normal
   action, but the die change it made is rolled back when the double-click
-  completes; the second press powers off instead of acting again.
+  completes; the second press powers off (after the power-off flourish) instead
+  of acting again.
 - Do not use blocking delays for button handling.
 - Ensure one physical press generates no more than one action.
 - A long press must not also trigger a short-press action when released.
@@ -72,11 +73,19 @@ Implement the application as a nonblocking state machine with these states:
 - LEDs off.
 - Enter a low-power ATtiny1614 sleep mode.
 - PA6 must wake the device when the button is pressed.
-- Entered on power-up, after the inactivity timeout, or immediately on a
-  double-click.
-- On wake, enter SELECT_DIE on the previously selected die.
+- Entered on power-up, after the inactivity timeout, or after the power-off
+  flourish that a double-click starts.
+- On wake, play the POWER_ON flourish, then enter SELECT_DIE on the previously
+  selected die.
 
-### 2. SELECT_DIE
+### 2. POWER_ON
+
+- A short spiral flourish as the device comes on: a rotating arc whose trail
+  grows a LED at a time until the whole ring is lit, with D13 strobing.
+- Nonblocking, like every other animation.
+- When it finishes, enter SELECT_DIE on the previously selected die.
+
+### 3. SELECT_DIE
 
 - D13 blinks continuously to indicate that the user is selecting a die.
 - Show the selected die by illuminating the corresponding number of perimeter LEDs:
@@ -100,7 +109,7 @@ The selected die is kept in RAM, which survives the power-down sleep, so the
 device wakes up on the die the user was last using. A true power cycle (cell
 removed) starts the sequence at d2 for the initial firmware revision.
 
-### 3. ROLLING
+### 4. ROLLING
 
 When a roll starts:
 
@@ -112,7 +121,7 @@ When a roll starts:
 
 The chase should illuminate one perimeter LED at a time, advancing D1, D2, D3, and so on through D12 before repeating as needed for the animation duration.
 
-### 4. CRIT
+### 5. CRIT
 
 When a d20 lands on its maximum face (a "perfect 20"), celebrate before
 revealing the result:
@@ -126,7 +135,7 @@ revealing the result:
 Only a perfect 20 on the d20 takes this detour; every other result goes straight
 from ROLLING to SHOW_RESULT.
 
-### 5. SHOW_RESULT
+### 6. SHOW_RESULT
 
 - Turn off the selection blink.
 - Display exactly N perimeter LEDs, where N is the roll result.
@@ -136,6 +145,14 @@ from ROLLING to SHOW_RESULT.
 - Reset the inactivity timer on user interaction.
 
 If practical, provide a brief D13 confirmation pulse when the result is finalized.
+
+### 7. POWER_OFF
+
+- A short spiral flourish as the device winds down: the same rotating arc, but
+  collapsing from the full ring to nothing, with D13 strobing.
+- Entered on a double-click (from any active state) and when the inactivity
+  timeout expires, so the device always winds down the same way.
+- When it finishes, turn off all LEDs and enter SLEEP.
 
 ## LED Driver
 
@@ -162,10 +179,11 @@ Implement a lightweight PRNG suitable for the ATtiny1614.
 ## Power Management
 
 - Use an initial inactivity timeout of approximately 30–60 seconds.
-- When the timeout expires, turn off all LEDs and enter low-power sleep.
-- A button press wakes the MCU and enters SELECT_DIE.
-- A double-click turns off all LEDs and enters low-power sleep immediately,
-  without waiting for the timeout.
+- When the timeout expires, play the power-off flourish, then turn off all LEDs
+  and enter low-power sleep.
+- A button press wakes the MCU, plays the power-on flourish and enters SELECT_DIE.
+- A double-click plays the power-off flourish and enters low-power sleep without
+  waiting for the timeout.
 - Disable unnecessary peripherals and timers during sleep.
 - Ensure the button wake-up configuration is compatible with the selected sleep mode.
 - Avoid EEPROM writes for selection state in this revision: the selection lives
@@ -227,45 +245,53 @@ detector to save CR2032 sleep current.
 ## State machine
 
 ```
-        power-up / inactivity timeout
-                 +------------------+
-                 v                  |
-   +----------------+   press    +--+-------------+
-   |     SLEEP      |----------->|   SELECT_DIE   |
-   | LEDs off,      |            | D13 blinks,    |
-   | PWR_DOWN       |            | D1..Dn shown   |
-   +----------------+            +----+------+----+
-                                      |      ^
-                          long press  |      | short press
-                                      v      |
-                                 +----+------+----+
-                                 |    ROLLING     |
-                                 | D1..D12 chase  |
-                                 +--------+-------+
-                                          | animation done: roll()
-                                          v
-                                 +----------------+
-                                 |      CRIT      |  a perfect 20 (d20 = 20)
-                                 | spiral + D13   |  only; skipped for every
-                                 | strobe         |  other result
-                                 +--------+-------+
-                                          | flourish done
-                                          v
-                                 +----------------+
-                                 |  SHOW_RESULT   |
-                                 | result + D13   |
-                                 | confirmation   |
-                                 +----------------+
-                                   |            |
-                          long press (same die) |
-                          rolls again            | short press
-                                                 v
-                                            SELECT_DIE
+        power-up
+            |
+            v
+   +----------------+   press (wakes MCU)   +----------------+
+   |     SLEEP      |---------------------->|    POWER_ON    |
+   | LEDs off,      |                       | spiral grows,  |
+   | PWR_DOWN       |<----------------------| D13 strobes    |
+   +----------------+   flourish done:      +--------+-------+
+            ^           turn off, sleep              | flourish done
+            |                                        v
+   +--------+-------+                       +----------------+
+   |   POWER_OFF    |  double-click or      |   SELECT_DIE   |
+   | spiral shrinks,|  inactivity timeout   | D13 blinks,    |
+   | D13 strobes    |  (any active state)   | D1..Dn shown   |
+   +----------------+                       +----+------+----+
+                                                 |      ^
+                                     long press  |      | short press
+                                                 v      |
+                                            +----+------+----+
+                                            |    ROLLING     |
+                                            | D1..D12 chase  |
+                                            +--------+-------+
+                                                     | animation done: roll()
+                                                     v
+                                            +----------------+
+                                            |      CRIT      |  a perfect 20
+                                            | spiral + D13   |  (d20 = 20) only;
+                                            | strobe         |  skipped otherwise
+                                            +--------+-------+
+                                                     | flourish done
+                                                     v
+                                            +----------------+
+                                            |  SHOW_RESULT   |
+                                            | result + D13   |
+                                            | confirmation   |
+                                            +----------------+
+                                              |            |
+                                     long press (same die) |
+                                     rolls again            | short press
+                                                             v
+                                                        SELECT_DIE
 ```
 
 | Transition | Trigger | Timing |
 |---|---|---|
-| SLEEP -> SELECT_DIE | button press (PA6 falling edge) wakes the MCU | immediate |
+| SLEEP -> POWER_ON | button press (PA6 falling edge) wakes the MCU | immediate |
+| POWER_ON -> SELECT_DIE | flourish finished | 450 ms spiral, 30 ms per step, D13 strobing |
 | SELECT_DIE: next die | short press | on release, < 600 ms |
 | SELECT_DIE -> ROLLING | long press | 600 ms of continuous press |
 | ROLLING -> SHOW_RESULT | animation finished (not a perfect 20) | 800 ms, 60 ms per chase step |
@@ -273,8 +299,9 @@ detector to save CR2032 sleep current.
 | CRIT -> SHOW_RESULT | flourish finished | 900 ms spiral, 30 ms per step, D13 strobing |
 | SHOW_RESULT -> SELECT_DIE | short press | on release |
 | SHOW_RESULT -> ROLLING | long press (same die) | 600 ms of continuous press |
-| any -> SLEEP | double-click | second short press released within 300 ms |
-| any -> SLEEP | inactivity timeout | 45 s after the last interaction |
+| any -> POWER_OFF | double-click | second short press released within 300 ms |
+| any -> POWER_OFF | inactivity timeout | 45 s after the last interaction |
+| POWER_OFF -> SLEEP | flourish finished | 450 ms spiral, 30 ms per step, D13 strobing |
 
 Details that are easy to get wrong and are handled explicitly:
 
@@ -289,16 +316,18 @@ Details that are easy to get wrong and are handled explicitly:
   pair is applied at once, but its die change is rolled back when the double-click
   completes - so the device powers off, and wakes, on the die the user had
   actually chosen. A click followed by a long hold is a long press, never a
-  double-click.
-- Waking returns to SELECT_DIE on the die the user was last using: the selection
-  lives in RAM, which survives the power-down sleep and is not reset on wake (a
-  true power cycle restarts at d2). A short press from SHOW_RESULT returns to
-  SELECT_DIE with the same die still selected.
+  double-click. The POWER_OFF flourish plays before the device sleeps.
+- Waking plays the POWER_ON flourish and then returns to SELECT_DIE on the die the
+  user was last using: the selection lives in RAM, which survives the power-down
+  sleep and is not reset on wake (a true power cycle restarts at d2). A short press
+  from SHOW_RESULT returns to SELECT_DIE with the same die still selected.
 - The inactivity timeout applies in SELECT_DIE as well, so a forgotten blinking
   device still goes to sleep instead of draining the cell.
-- A perfect 20 on the d20 detours through CRIT (a fast spiral with D13 strobing)
-  before the 20 is revealed; no other result does. The flourish is timed like the
-  chase (nonblocking), so the button keeps working throughout.
+- A perfect 20 on the d20 detours through CRIT before the 20 is revealed; no other
+  result does. POWER_ON, POWER_OFF and CRIT all share one spiral animation
+  (`spiralFrame`): a rotating arc that grows to fill the ring (power-on, crit) or
+  shrinks to nothing (power-off) while D13 strobes. Every flourish is timed like
+  the chase (nonblocking), so the button keeps working throughout.
 
 ## LED driver
 
