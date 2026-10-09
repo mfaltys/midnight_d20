@@ -18,12 +18,13 @@ enum class State : uint8_t {
   SLEEP,        // LEDs off, MCU in power-down until the button is pressed
   SELECT_DIE,   // D13 blinks, the chosen die is shown on D1..D12
   ROLLING,      // clockwise chase animation
+  CRIT,         // d20 landed on 20: fast spiral + D13 strobe before the result
   SHOW_RESULT,  // the rolled value on D1..D12 until the next interaction
 };
 
 State s_state = State::SLEEP;
 uint8_t s_dieIndex = 0;      // selection slot, 0 = d2; kept in RAM across sleep
-uint8_t s_result = 0;        // last rolled value (1..12)
+uint8_t s_result = 0;        // last rolled value (1..20)
 // Die index captured just before the most recent short press, so that a
 // double-click can roll back the die change its first click already made.
 uint8_t s_dieBeforeShortPress = 0;
@@ -31,14 +32,21 @@ uint32_t s_lastActivityMs = 0;
 uint32_t s_stateEnteredMs = 0;
 uint32_t s_lastChaseStepMs = 0;
 uint8_t s_chaseIndex = 0;
+uint8_t s_critStep = 0;      // spiral step during the CRIT flourish
 uint32_t s_statusPulseUntilMs = 0;
 
 void enterSelectDie();
 void enterRolling(uint32_t now);
+void enterCrit(uint32_t now);
 void enterShowResult(uint32_t now);
 void enterSleep();
 void sleepUntilWake();
 void showPattern(uint16_t mask, bool statusOn);
+
+// True when the die just rolled is a d20 showing its maximum (a "perfect 20").
+bool isCrit();
+// Contiguous arc of `length` perimeter LEDs starting at `start`, wrapping.
+uint16_t arcMask(uint8_t start, uint8_t length);
 
 // ---------------------------------------------------------------------------
 // SLEEP
@@ -90,8 +98,16 @@ void updateSelectDie(uint32_t now, button::Event ev) {
     return;
   }
 
-  const bool statusOn = ((now / STATUS_BLINK_HALF_MS) & 1u) == 0u;
-  showPattern(dice::ledMaskForValue(dice::sidesAt(s_dieIndex)), statusOn);
+  // D13 blinks as the "choosing a die" cue, and the die is shown by its
+  // selection indicator. Dice up to d12 light their maximum count; d20 has no
+  // room for 20 LEDs, so it lights the whole ring, and because D13 is part of
+  // that pattern the whole thing blinks to make "d20 selected" unmistakable.
+  // Every other die keeps a steady perimeter with only D13 blinking.
+  const uint8_t sides = dice::sidesAt(s_dieIndex);
+  const dice::Display d = dice::selectionFor(sides);
+  const bool blinkOn = ((now / STATUS_BLINK_HALF_MS) & 1u) == 0u;
+  const uint16_t mask = (d.statusOn && !blinkOn) ? 0u : d.perimeterMask;
+  showPattern(mask, blinkOn);
 
   if ((uint32_t)(now - s_lastActivityMs) >= INACTIVITY_TIMEOUT_MS) {
     s_state = State::SLEEP;
@@ -113,7 +129,13 @@ void enterRolling(uint32_t now) {
 
 void updateRolling(uint32_t now) {
   if ((uint32_t)(now - s_stateEnteredMs) >= ROLL_ANIMATION_MS) {
-    enterShowResult(now);
+    // The chase is over: roll, then either celebrate a perfect 20 or reveal.
+    s_result = prng::roll(dice::sidesAt(s_dieIndex));
+    if (isCrit()) {
+      enterCrit(now);
+    } else {
+      enterShowResult(now);
+    }
     return;
   }
   if ((uint32_t)(now - s_lastChaseStepMs) >= ROLL_CHASE_STEP_MS) {
@@ -124,14 +146,60 @@ void updateRolling(uint32_t now) {
 }
 
 // ---------------------------------------------------------------------------
+// CRIT (a d20 landed on 20)
+// ---------------------------------------------------------------------------
+bool isCrit() {
+  const uint8_t sides = dice::sidesAt(s_dieIndex);
+  return sides == dice::MAX_VALUE && s_result == sides;  // a perfect 20
+}
+
+uint16_t arcMask(uint8_t start, uint8_t length) {
+  uint16_t mask = 0;
+  for (uint8_t i = 0; i < length; i++) {
+    mask |= static_cast<uint16_t>(1u << ((start + i) % charlieplex::PERIMETER_COUNT));
+  }
+  return mask;
+}
+
+void enterCrit(uint32_t now) {
+  s_state = State::CRIT;
+  s_stateEnteredMs = now;
+  s_lastChaseStepMs = now;
+  s_critStep = 0;
+  showPattern(1u << 0, false);  // the spiral starts at D1
+}
+
+void updateCrit(uint32_t now) {
+  if ((uint32_t)(now - s_stateEnteredMs) >= CRIT_ANIMATION_MS) {
+    enterShowResult(now);
+    return;
+  }
+  if ((uint32_t)(now - s_lastChaseStepMs) >= CRIT_SPIRAL_STEP_MS) {
+    s_lastChaseStepMs = now;
+    s_critStep++;
+  }
+  // A fast spiral: a rotating arc whose trail grows one LED at a time until the
+  // whole ring is lit, while D13 strobes on its own, faster period.
+  const uint8_t head = static_cast<uint8_t>(s_critStep % charlieplex::PERIMETER_COUNT);
+  uint8_t trail = static_cast<uint8_t>(1u + s_critStep / CRIT_TAIL_GROW_STEPS);
+  if (trail > charlieplex::PERIMETER_COUNT) {
+    trail = charlieplex::PERIMETER_COUNT;
+  }
+  const bool strobeOn = ((now / CRIT_STROBE_HALF_MS) & 1u) == 0u;
+  showPattern(arcMask(head, trail), strobeOn);
+}
+
+// ---------------------------------------------------------------------------
 // SHOW_RESULT
 // ---------------------------------------------------------------------------
 void enterShowResult(uint32_t now) {
-  s_result = prng::roll(dice::sidesAt(s_dieIndex));
+  const uint8_t sides = dice::sidesAt(s_dieIndex);
   s_state = State::SHOW_RESULT;
   s_lastActivityMs = now;
   s_statusPulseUntilMs = now + RESULT_PULSE_MS;
-  showPattern(dice::ledMaskForValue(s_result), true);
+  // First frame: the result plus the D13 confirmation pulse. The d20 "+10"
+  // marker is folded in by updateShowResult on the following passes.
+  showPattern(dice::displayFor(sides, s_result).perimeterMask, true);
 }
 
 void updateShowResult(uint32_t now, button::Event ev) {
@@ -144,8 +212,12 @@ void updateShowResult(uint32_t now, button::Event ev) {
     return;
   }
 
+  // D13 carries two meanings here: the brief confirmation pulse (every die) and
+  // the d20 "+10" marker for results above 10. OR them so an 11..20 result keeps
+  // the marker lit after the pulse has ended.
   const bool pulseActive = static_cast<int32_t>(s_statusPulseUntilMs - now) > 0;
-  showPattern(dice::ledMaskForValue(s_result), pulseActive);
+  const dice::Display d = dice::displayFor(dice::sidesAt(s_dieIndex), s_result);
+  showPattern(d.perimeterMask, d.statusOn || pulseActive);
 
   if ((uint32_t)(now - s_lastActivityMs) >= INACTIVITY_TIMEOUT_MS) {
     s_state = State::SLEEP;
@@ -211,6 +283,9 @@ void update() {
       break;
     case State::ROLLING:
       updateRolling(now);
+      break;
+    case State::CRIT:
+      updateCrit(now);
       break;
     case State::SHOW_RESULT:
       updateShowResult(now, ev);

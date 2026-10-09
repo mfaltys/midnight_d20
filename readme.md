@@ -37,13 +37,16 @@ Support the following dice, cycled in this order:
 4. d8
 5. d10
 6. d12
-7. Return to d2
+7. d20
+8. Return to d2
 
 For each die, a roll produces a uniformly distributed integer from 1 through the selected die's maximum value, inclusive.
 
 Display the final result by illuminating exactly N perimeter LEDs, starting at D1 and proceeding clockwise through D_N. For example, a result of 4 lights D1–D4; a result of 12 lights all perimeter LEDs.
 
-Do not implement d20 or d100 in this revision.
+Because the ring has only 12 LEDs, a d20 face cannot be shown as a plain count. For d20, a result of 1–10 lights D1–D_N as above, and a result of 11–20 lights D1–D_(N−10) plus D13 as a "+10" marker: 11 lights D1 + D13, and 20 lights D1–D10 + D13. Results on the dice up to d12 are unchanged.
+
+Do not implement d100 in this revision.
 
 ## Button Interaction
 
@@ -83,8 +86,13 @@ Implement the application as a nonblocking state machine with these states:
   - d8: D1–D8
   - d10: D1–D10
   - d12: D1–D12
+  - d20: all 12 perimeter LEDs (D1–D12) with D13 lit
+- For every die except d20 the perimeter pattern stays steady and only D13
+  blinks. d20 has no room for 20 LEDs, so it lights the whole ring, and because
+  D13 is part of that pattern the whole thing (D1–D12 together with D13) blinks
+  to make "d20 selected" unmistakable.
 - A short press advances to the next die.
-- After d12, selection wraps to d2.
+- After d20, selection wraps to d2.
 - A long press of approximately 600 ms confirms the selected die and starts a roll.
 - Stop the status LED selection blink when rolling begins.
 
@@ -104,7 +112,21 @@ When a roll starts:
 
 The chase should illuminate one perimeter LED at a time, advancing D1, D2, D3, and so on through D12 before repeating as needed for the animation duration.
 
-### 4. SHOW_RESULT
+### 4. CRIT
+
+When a d20 lands on its maximum face (a "perfect 20"), celebrate before
+revealing the result:
+
+- Run a fast spiral around D1–D12: a rotating arc whose trail grows a LED at a
+  time until the whole ring is lit.
+- Strobe D13 (roughly 10 Hz) for the whole flourish.
+- After the flourish, continue to SHOW_RESULT to display the 20.
+- Use nonblocking timing, as with ROLLING.
+
+Only a perfect 20 on the d20 takes this detour; every other result goes straight
+from ROLLING to SHOW_RESULT.
+
+### 5. SHOW_RESULT
 
 - Turn off the selection blink.
 - Display exactly N perimeter LEDs, where N is the roll result.
@@ -223,6 +245,13 @@ detector to save CR2032 sleep current.
                                           | animation done: roll()
                                           v
                                  +----------------+
+                                 |      CRIT      |  a perfect 20 (d20 = 20)
+                                 | spiral + D13   |  only; skipped for every
+                                 | strobe         |  other result
+                                 +--------+-------+
+                                          | flourish done
+                                          v
+                                 +----------------+
                                  |  SHOW_RESULT   |
                                  | result + D13   |
                                  | confirmation   |
@@ -239,7 +268,9 @@ detector to save CR2032 sleep current.
 | SLEEP -> SELECT_DIE | button press (PA6 falling edge) wakes the MCU | immediate |
 | SELECT_DIE: next die | short press | on release, < 600 ms |
 | SELECT_DIE -> ROLLING | long press | 600 ms of continuous press |
-| ROLLING -> SHOW_RESULT | animation finished | 800 ms, 60 ms per chase step |
+| ROLLING -> SHOW_RESULT | animation finished (not a perfect 20) | 800 ms, 60 ms per chase step |
+| ROLLING -> CRIT | a perfect 20 (d20 = 20) after the chase | immediately |
+| CRIT -> SHOW_RESULT | flourish finished | 900 ms spiral, 30 ms per step, D13 strobing |
 | SHOW_RESULT -> SELECT_DIE | short press | on release |
 | SHOW_RESULT -> ROLLING | long press (same die) | 600 ms of continuous press |
 | any -> SLEEP | double-click | second short press released within 300 ms |
@@ -265,6 +296,9 @@ Details that are easy to get wrong and are handled explicitly:
   SELECT_DIE with the same die still selected.
 - The inactivity timeout applies in SELECT_DIE as well, so a forgotten blinking
   device still goes to sleep instead of draining the cell.
+- A perfect 20 on the d20 detours through CRIT (a fast spiral with D13 strobing)
+  before the 20 is revealed; no other result does. The flourish is timed like the
+  chase (nonblocking), so the button keeps working throughout.
 
 ## LED driver
 

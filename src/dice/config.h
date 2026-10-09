@@ -19,6 +19,14 @@ constexpr uint16_t STATUS_BLINK_HALF_MS = 250;
 constexpr uint16_t ROLL_ANIMATION_MS = 800;
 constexpr uint16_t ROLL_CHASE_STEP_MS = 60;
 
+// Crit flourish for a perfect 20 on the d20: a fast spiral around the perimeter
+// (a rotating arc whose trail grows a LED at a time until the ring is full)
+// while D13 strobes, played before the result is revealed.
+constexpr uint16_t CRIT_ANIMATION_MS = 900;
+constexpr uint16_t CRIT_SPIRAL_STEP_MS = 30;
+constexpr uint8_t CRIT_TAIL_GROW_STEPS = 2;   // spiral steps per extra trail LED
+constexpr uint16_t CRIT_STROBE_HALF_MS = 50;  // D13 strobe half-period (~10 Hz)
+
 // Short D13 confirmation pulse once a result is finalised.
 constexpr uint16_t RESULT_PULSE_MS = 120;
 
