@@ -396,6 +396,31 @@ favoured (the modulo is applied only to an unbiased sub-range). The ADC is
 disabled again after seeding. This is a casual dice roller, not a cryptographic
 device.
 
+## Sleep and battery life
+
+The CR2032 is not meant to be changed often, so the sleep path is deliberately
+deep. `sleepUntilWake()`:
+
+- turns the LEDs off and stops the refresh timer (`charlieplex::end()`),
+- disables the ADC,
+- stops the millis timer (`stop_millis()`) and enters `SLEEP_MODE_PWR_DOWN`,
+  leaving only the PA6 falling-edge interrupt armed.
+
+TCD0 (the millis timer) is clocked from OSC20M, which stops in power-down, so it
+cannot wake the MCU; `stop_millis()`/`restart_millis()` make that explicit and keep
+it from firing even if the clock source ever changes. `restart_millis()` preserves
+the millis count, so `millis()` simply freezes across the sleep - which is fine
+because no timeout spans a sleep (the inactivity timer is restarted on wake). The
+sleep loop re-arms `sleep_enable()` before every `sleep_cpu()`: the sleep-enable
+bit is cleared on wake, so without that a stray interrupt would leave the CPU
+spinning at full current.
+
+The single biggest sleep-current item is the brown-out detector. Run
+`pio run -e dice -t fuses` once per chip: `board_fuses.BODCFG = 0x00` disables the
+BOD, which otherwise can draw tens of microamps while asleep and dominate the
+cell's life. All five Charlieplex bus pins are released to high impedance and the
+button pin keeps its pull-up, so nothing is driven while asleep.
+
 ## Hardware bring-up test
 
 `pio run -e hwtest -t upload` builds a self-contained test:

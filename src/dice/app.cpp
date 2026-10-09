@@ -86,6 +86,10 @@ void sleepUntilWake() {
   charlieplex::end();   // refresh timer off
   ADC0.CTRLA = 0;       // the ADC is unused while asleep
   set_sleep_mode(SLEEP_MODE_PWR_DOWN);
+  // Stop the millis timer interrupt so only the button can wake the MCU. TCD0 is
+  // clocked from OSC20M and would stop in power-down anyway, but stopping it
+  // explicitly means a timer overflow can never cost us a wake-up.
+  stop_millis();
 
   // Arm the wake-up and check the button with interrupts disabled so an edge
   // cannot slip in between the check and the sleep.
@@ -95,16 +99,23 @@ void sleepUntilWake() {
     // The button is held (for example the inactivity timeout expired mid-press).
     // Sleeping now would miss the falling edge, so stay awake and try again.
     sei();
+    restart_millis();
     return;
   }
-  sleep_enable();
-  sei();
-  while (!button::wakeFlag()) {
-    sleep_cpu();  // any other interrupt returns here and we sleep again
-  }
-  sleep_disable();
   sei();
 
+  // Re-arm the sleep bit before every sleep_cpu(): it is cleared when the MCU
+  // wakes, so without this a stray interrupt would leave the CPU spinning at full
+  // current instead of going back to sleep.
+  while (!button::wakeFlag()) {
+    sleep_enable();
+    sleep_cpu();
+    sleep_disable();
+  }
+
+  // millis() is frozen across the sleep, which is fine: no timeout spans a sleep
+  // (the inactivity timer is restarted on wake).
+  restart_millis();
   charlieplex::begin();  // refresh timer back on (all LEDs still dark)
   // SRAM is retained through power-down and waking is not a reset, so the die the
   // user was last using is still in s_dieIndex: wake up on it rather than on d2.
