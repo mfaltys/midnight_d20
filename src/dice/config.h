@@ -17,12 +17,12 @@ constexpr uint16_t STATUS_BLINK_HALF_MS = 250;
 // ROLL_CHASE_STEP_MS. The chase loops for as long as the roll button is held and
 // then always finishes the revolution it is in after release, so a roll lasts the
 // hold time plus at most one lap of the perimeter.
-constexpr uint16_t ROLL_CHASE_STEP_MS = 60;
+constexpr uint16_t ROLL_CHASE_STEP_MS = 50;
 
 // Spiral flourish: a rotating arc whose trail grows (or shrinks) a LED at a time
 // while D13 strobes. Shared by the crit celebration and the power-on / power-off
 // animations. One spiral step lasts SPIRAL_STEP_MS.
-constexpr uint16_t SPIRAL_STEP_MS = 30;
+constexpr uint16_t SPIRAL_STEP_MS = 42;
 constexpr uint16_t SPIRAL_STROBE_HALF_MS = 50;  // D13 strobe half-period (~10 Hz)
 
 // Crit flourish for a perfect 20 on the d20: the spiral winds outward, adding a
