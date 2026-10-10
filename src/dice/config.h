@@ -32,8 +32,8 @@ constexpr uint8_t CRIT_TAIL_GROW_STEPS = 2;
 
 // Power-on / power-off flourishes: the same spiral, outward on wake and inward on
 // the way to sleep, kept short so the device feels snappy.
-constexpr uint16_t POWER_ON_MS = 450;
-constexpr uint16_t POWER_OFF_MS = 450;
+constexpr uint16_t POWER_ON_MS = 650;
+constexpr uint16_t POWER_OFF_MS = 650;
 constexpr uint8_t POWER_TAIL_GROW_STEPS = 1;
 
 // Short D13 confirmation pulse once a result is finalised.
