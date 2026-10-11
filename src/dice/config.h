@@ -27,7 +27,7 @@ constexpr uint16_t SPIRAL_STROBE_HALF_MS = 50;  // D13 strobe half-period (~10 H
 
 // Crit flourish for a perfect 20 on the d20: the spiral winds outward, adding a
 // trail LED every CRIT_TAIL_GROW_STEPS steps, then reveals the result.
-constexpr uint16_t CRIT_ANIMATION_MS = 900;
+constexpr uint16_t CRIT_ANIMATION_MS = 1200;
 constexpr uint8_t CRIT_TAIL_GROW_STEPS = 2;
 
 // Power-on / power-off flourishes: the same spiral, outward on wake and inward on
