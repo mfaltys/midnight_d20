@@ -4,6 +4,7 @@
 #include <avr/interrupt.h>
 #include <avr/io.h>
 #include <avr/sleep.h>
+#include <avr/wdt.h>
 
 #include "button.h"
 #include "charlieplex.h"
@@ -49,6 +50,66 @@ void showPattern(uint16_t mask, bool statusOn);
 
 // True when the die just rolled is a d20 showing its maximum (a "perfect 20").
 bool isCrit();
+
+// ---------------------------------------------------------------------------
+// Watchdog (see WATCHDOG_ENABLED / WATCHDOG_TIMEOUT_MS in config.h)
+// ---------------------------------------------------------------------------
+// Map the configured timeout to the first WDT_PERIOD_*_gc period that is at least
+// that long. The WDT counts at 32.768 kHz, so the period codes are powers of two
+// from 8 ms (8 cycles) to 8.2 s (8K cycles).
+constexpr uint8_t wdtPeriodFor(uint16_t timeoutMs) {
+  return timeoutMs <= 8      ? WDT_PERIOD_8CLK_gc
+         : timeoutMs <= 16   ? WDT_PERIOD_16CLK_gc
+         : timeoutMs <= 32   ? WDT_PERIOD_32CLK_gc
+         : timeoutMs <= 64   ? WDT_PERIOD_64CLK_gc
+         : timeoutMs <= 128  ? WDT_PERIOD_128CLK_gc
+         : timeoutMs <= 256  ? WDT_PERIOD_256CLK_gc
+         : timeoutMs <= 512  ? WDT_PERIOD_512CLK_gc
+         : timeoutMs <= 1000 ? WDT_PERIOD_1KCLK_gc
+         : timeoutMs <= 2000 ? WDT_PERIOD_2KCLK_gc
+         : timeoutMs <= 4000 ? WDT_PERIOD_4KCLK_gc
+                             : WDT_PERIOD_8KCLK_gc;
+}
+static_assert(WATCHDOG_TIMEOUT_MS >= 8 && WATCHDOG_TIMEOUT_MS <= 8200,
+              "WATCHDOG_TIMEOUT_MS is outside the WDT's 8 ms..8.2 s range");
+constexpr uint8_t WDT_TIMEOUT_CODE = wdtPeriodFor(WATCHDOG_TIMEOUT_MS);
+
+// WDT.CTRLA is a protected register: the CCP write sequence must not be
+// interrupted, so keep it inside a critical section (the same pattern the LED
+// driver uses for its pattern update). A write is also dropped while the previous
+// one is still syncing, hence the SYNCBUSY wait.
+inline void wdtWrite(uint8_t period) {
+  while (WDT.STATUS & WDT_SYNCBUSY_bm) {
+  }
+  const uint8_t sreg = SREG;
+  cli();
+  _PROTECTED_WRITE(WDT.CTRLA, period);
+  SREG = sreg;
+}
+
+// Start the watchdog (compiles to nothing when WATCHDOG_ENABLED is false).
+// WINDOW_OFF means the WDT only has to be pet before the period expires, never
+// too early.
+void watchdogEnable() {
+  if (WATCHDOG_ENABLED) {
+    wdtWrite(static_cast<uint8_t>(WDT_TIMEOUT_CODE | WDT_WINDOW_OFF_gc));
+  }
+}
+
+// Stop the watchdog, so it cannot reset the device across a power-down sleep.
+void watchdogDisable() {
+  if (WATCHDOG_ENABLED) {
+    wdtWrite(WDT_PERIOD_OFF_gc);
+  }
+}
+
+// Feed the watchdog; called once per main-loop pass, so only a stalled update()
+// ever lets it reach its timeout.
+void watchdogPet() {
+  if (WATCHDOG_ENABLED) {
+    wdt_reset();  // the WDR instruction
+  }
+}
 
 // ---------------------------------------------------------------------------
 // Spiral flourish (shared by POWER_ON, POWER_OFF and CRIT)
@@ -104,6 +165,11 @@ void sleepUntilWake() {
   }
   sei();
 
+  // The WDT keeps running in power-down and would reset the device (losing the
+  // remembered die) long before the inactivity sleep ends, so stop it just before
+  // parking the MCU and restart it the moment we wake.
+  watchdogDisable();
+
   // Re-arm the sleep bit before every sleep_cpu(): it is cleared when the MCU
   // wakes, so without this a stray interrupt would leave the CPU spinning at full
   // current instead of going back to sleep.
@@ -116,6 +182,7 @@ void sleepUntilWake() {
   // millis() is frozen across the sleep, which is fine: no timeout spans a sleep
   // (the inactivity timer is restarted on wake).
   restart_millis();
+  watchdogEnable();
   charlieplex::begin();  // refresh timer back on (all LEDs still dark)
   // SRAM is retained through power-down and waking is not a reset, so the die the
   // user was last using is still in s_dieIndex: wake up on it rather than on d2.
@@ -317,6 +384,7 @@ void begin() {
   button::begin();
   prng::begin();  // ADC-noise + timing-jitter seed, ADC left disabled
   s_lastActivityMs = millis();
+  watchdogEnable();  // on from the first awake moment, before the first sleep
   sleepUntilWake();  // boot dark and asleep; the first press wakes the device
 }
 
@@ -325,6 +393,8 @@ void update() {
     sleepUntilWake();
     return;
   }
+
+  watchdogPet();  // the main loop is running, so keep the watchdog fed
 
   const uint32_t now = millis();
   const button::Event ev = button::poll();

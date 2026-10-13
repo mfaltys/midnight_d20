@@ -19,6 +19,8 @@ so the whole thing fits on a single CR2032 and sips power between rolls.
   again on the way to sleep.
 - **Sleeps deeply** — after about 45 seconds idle, or on a double-click, it powers
   down and waits for a button press. The die you were using is remembered.
+- **Recovers itself** — a watchdog resets the device automatically if the firmware
+  ever hangs, so a rare glitch clears itself without pulling the cell out.
 - **Fair rolls** — a seeded xorshift32 generator with rejection sampling, so no
   face is ever favoured.
 

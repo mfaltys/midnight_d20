@@ -421,6 +421,30 @@ BOD, which otherwise can draw tens of microamps while asleep and dominate the
 cell's life. All five Charlieplex bus pins are released to high impedance and the
 button pin keeps its pull-up, so nothing is driven while asleep.
 
+## Watchdog
+
+A watchdog recovers the device from a hung or corrupted main loop without the user
+having to pull the cell. `app::update()` pets the WDT (the `WDR` instruction) on
+every pass, so if the loop ever stops running the WDT resets the MCU within
+`WATCHDOG_TIMEOUT_MS` (2 s) - the same clean restart as a power cycle: the die
+selection returns to d2 and the device comes up dark and asleep.
+
+The WDT is clocked by the 32 kHz ULP oscillator and costs only ~0.7 uA while it
+runs (the datasheet's *Peripherals Power Consumption* table lists the WDT at
+0.7 uA including OSCULP32K, about 27x less than the BOD's 19 uA continuous), so it
+is enabled only while the device is awake. `sleepUntilWake()` stops it before
+entering power-down: the WDT keeps running in all sleep modes and its longest
+period is 8.2 s, far shorter than the inactivity sleep, so leaving it on would
+reset the device every few seconds while idle and lose the remembered die. It is
+restarted on every wake path.
+
+The switch and the timeout both live in `config.h` (`WATCHDOG_ENABLED`,
+`WATCHDOG_TIMEOUT_MS`); setting `WATCHDOG_ENABLED` to false compiles the watchdog
+out entirely for testing. The timeout is mapped to the matching `WDT_PERIOD_*_gc`
+at compile time, and `WDT.CTRLA` is written through the CCP sequence - inside a
+critical section, after a `SYNCBUSY` wait - rather than through `wdt_enable()`,
+whose timeout mapping is wrong on these parts.
+
 ## Hardware bring-up test
 
 `pio run -e hwtest -t upload` builds a self-contained test:

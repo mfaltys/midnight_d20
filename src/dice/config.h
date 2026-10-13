@@ -1,16 +1,13 @@
 /*
  * Application timing constants for the dice roller.
  *
- * The button debounce window, the long-press threshold and the double-click
- * window live with the button driver (lib/button/button.h) because they define
- * its behaviour; everything the state machine times is here.
  */
 #ifndef CONFIG_H
 #define CONFIG_H
 
 #include <stdint.h>
 
-// D13 blink while choosing a die: on for STATUS_BLINK_HALF_MS, off for the same.
+// Status LED/D13 blink while choosing a die: on for STATUS_BLINK_HALF_MS, off for the same.
 constexpr uint16_t STATUS_BLINK_HALF_MS = 250;
 
 // Rolling animation: a clockwise chase around D1..D12 that advances every
@@ -41,5 +38,15 @@ constexpr uint16_t RESULT_PULSE_MS = 120;
 
 // Inactivity timeout: LEDs off and power-down sleep (spec.md asks for 30-60 s).
 constexpr uint32_t INACTIVITY_TIMEOUT_MS = 45000;
+
+// ---------------------------------------------------------------------------
+// Watchdog
+// ---------------------------------------------------------------------------
+// The watchdog lets the device recover on its own from a hung or corrupted main
+// loop, so a glitch that used to need the cell pulled out clears itself instead.
+constexpr bool WATCHDOG_ENABLED = true;
+
+// Timeout in milliseconds, rounded up to the next available WDT period
+constexpr uint16_t WATCHDOG_TIMEOUT_MS = 2000;
 
 #endif  // CONFIG_H
