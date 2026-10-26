@@ -1,0 +1,186 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="description" content="Inscribe Noctus Arcanum firmware onto your dice roller straight from your browser - no toolchain required.">
+    <meta name="theme-color" content="#08060d">
+    <title>Noctus Arcanum | Firmware Rite</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@400;600;700&family=EB+Garamond:ital,wght@0,400;0,500;1,400&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+    <main class="shell">
+        <header class="hero">
+            <div class="hero-text">
+                <p class="sigil-line">
+                    <span class="rule"></span>
+                    Noctus Arcanum &middot; Midnight CAD
+                    <span class="rule"></span>
+                </p>
+                <h1>Noctus<em>Arcanum</em></h1>
+                <p class="subtitle">Arcane Capacitor</p>
+                <p class="lede">
+                    A pocket-sized instrument for those who prefer their fate quantified.
+                </p>
+            </div>
+
+            <div class="hero-glyph">
+                <!-- Face-on d20: the hexagon silhouette, plus the inverted triangle
+                     whose edge midpoints are exactly the front triangle's vertices. -->
+                <svg viewBox="0 0 200 200" role="img" aria-label="A twenty-sided die">
+                    <defs>
+                        <linearGradient id="d20-face" x1="0" y1="0" x2="0.3" y2="1">
+                            <stop offset="0%" stop-color="#31214d"/>
+                            <stop offset="100%" stop-color="#140e22"/>
+                        </linearGradient>
+                        <filter id="d20-glow" x="-45%" y="-45%" width="190%" height="190%">
+                            <feGaussianBlur stdDeviation="3.2" result="blur"/>
+                            <feMerge>
+                                <feMergeNode in="blur"/>
+                                <feMergeNode in="SourceGraphic"/>
+                            </feMerge>
+                        </filter>
+                    </defs>
+                    <g filter="url(#d20-glow)">
+                        <polygon points="100,56 138.1,122 61.9,122" fill="url(#d20-face)" stroke="#f0d488" stroke-width="2.2" stroke-linejoin="round"/>
+                        <polygon points="23.8,56 176.2,56 100,188" fill="none" stroke="#c9a227" stroke-width="1.1" stroke-linejoin="round" opacity="0.85"/>
+                        <polygon points="100,12 176.2,56 176.2,144 100,188 23.8,144 23.8,56" fill="none" stroke="#c9a227" stroke-width="1.1" stroke-linejoin="round" opacity="0.85"/>
+                        <circle cx="100" cy="62.5" r="2.6" fill="#f0d488"/>
+                    </g>
+                </svg>
+            </div>
+        </header>
+
+        <section class="panel" aria-label="Firmware rite">
+            <div class="panel-grid">
+                <div class="column controls-column">
+                    <!-- I. Connection -->
+                    <section class="chapter">
+                        <h2><span class="rune"><span>I</span></span> Bind the Reliquary</h2>
+
+                        <div id="status" class="status disconnected">Status: <strong>Unbound</strong></div>
+
+                        <div class="button-group">
+                            <button class="btn-primary" id="btn-connect" type="button">
+                                <span class="button-icon">&#10022;</span>
+                                <span>Connect</span>
+                            </button>
+                            <button class="btn-ghost" id="btn-disconnect" type="button" disabled>Disconnect</button>
+                        </div>
+
+                        <p class="step-hint" id="serial-hint">
+                            Web Serial is required: use Chrome, Edge or Opera on a desktop.
+                        </p>
+
+                        <dl class="lore" id="device-lore" hidden>
+                            <div><dt>Device</dt><dd id="lore-device">&mdash;</dd></div>
+                            <div><dt>Device ID</dt><dd id="lore-id">&mdash;</dd></div>
+                            <div><dt>Flash</dt><dd id="lore-flash">&mdash;</dd></div>
+                            <div><dt>Clock fuse</dt><dd id="lore-osccfg">&mdash;</dd></div>
+                            <div><dt>Brown-out fuse</dt><dd id="lore-bodcfg">&mdash;</dd></div>
+                        </dl>
+                    </section>
+
+                    <!-- II. Firmware choice -->
+                    <section class="chapter">
+                        <h2><span class="rune"><span>II</span></span> Choose the Rite</h2>
+
+                        <label class="field-label" for="firmware-select">Firmware scroll</label>
+                        <select id="firmware-select" disabled>
+                            <option value="">&mdash; reading the archive &mdash;</option>
+                        </select>
+
+                        <p class="rite-blurb" id="firmware-blurb"></p>
+                    </section>
+
+                    <!-- III. Inscribe -->
+                    <section class="chapter">
+                        <h2><span class="rune"><span>III</span></span> Inscribe</h2>
+
+                        <button class="btn-primary" id="btn-flash" type="button" disabled>
+                            <span class="button-icon">&#10095;</span>
+                            <span>Inscribe Device</span>
+                        </button>
+
+                        <div class="progress" id="progress" hidden>
+                            <div class="progress-track"><div class="progress-fill" id="progress-fill"></div></div>
+                            <span class="progress-label" id="progress-label">Idle</span>
+                        </div>
+
+                        <p class="step-hint">
+                            Inscribing erases the chip and rewrites it, then sets the 16&nbsp;MHz
+                            clock and brown-out fuses. Keep the adapter connected until the
+                            chronicle reports success.
+                        </p>
+                    </section>
+                </div>
+
+                <!-- Chronicle -->
+                <div class="column log-column">
+                    <section class="chapter">
+                        <h2>
+                            <span class="rune"><span>&#10022;</span></span>
+                            Chronicle
+                            <button class="btn-ghost btn-small" id="btn-clear-log" type="button">Clear</button>
+                        </h2>
+                        <div id="log" class="log" role="log" aria-label="Operation log"></div>
+                    </section>
+                </div>
+            </div>
+        </section>
+
+        <section class="notes">
+            <article class="note">
+                <h3>What you need</h3>
+                <p>
+                    A serialUPDI programmer, any will do, you can find our official adapter
+                    <a href="https://www.etsy.com/listing/4591195235/updi-programmer-adapter-usbc" target="_blank" rel="noreferrer">here &#8599;</a>
+                </p>
+            </article>
+            <article class="note">
+                <h3>Reading the roll</h3>
+                <p>
+                    The ring lights one LED per point, clockwise from the top. A d20 needs more
+                    room than twelve lights allow, so the status LED marks <code>+10</code>:
+                    a natural 20 lights ten ring LEDs plus the status LED.
+                </p>
+            </article>
+            <article class="note">
+                <h3>If the ring stays dark</h3>
+                <p>
+                    A freshly inscribed chip is left halted in programming mode until it is
+                    reset. Unplug the UPDI adapter and pull and reseat the coin cell, the
+                    device is now ready for use.
+                </p>
+            </article>
+        </section>
+
+        <footer class="footer">
+            <span>Noctus Arcanum firmware rite</span>
+            <span class="footer-credit">
+                UPDI code from <a href="https://github.com/manuelkasper/webupdi" target="_blank" rel="noreferrer">WebUPDI</a>
+                by Manuel Kasper (MIT)
+            </span>
+            <span class="spacer"></span>
+            <a href="https://github.com/mfaltys/midnight_d20" target="_blank" rel="noreferrer">github.com/mfaltys/midnight_d20 &#8599;</a>
+        </footer>
+    </main>
+
+    <noscript>
+        <p style="padding: 0 20px 40px; color: #9d8f77; text-align: center;">
+            The rite requires JavaScript and Web Serial. Enable JavaScript, then open this page in Chrome, Edge or Opera.
+        </p>
+    </noscript>
+
+    <script type="module">
+        import { initializeUI } from './noctus-ui.ts';
+
+        window.addEventListener('load', () => {
+            initializeUI();
+        });
+    </script>
+</body>
+</html>

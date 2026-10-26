@@ -1,0 +1,3 @@
+# Placeholder so public/firmware/ exists in a fresh checkout.
+# CI fills this with <env>/firmware.hex + manifest.json; Vite copies the whole
+# directory into dist/ so the flasher can fetch firmware from its own origin.

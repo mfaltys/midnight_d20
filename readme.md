@@ -1,35 +1,31 @@
-# Noctis Arcanum
+<div align="center">
 
-A pocket-sized electronic dice roller: a ring of twelve LEDs, one button, and a
-coin cell. Pick a die, press and hold to roll, and watch the light chase its way
-around the ring before settling on your number.
+# Noctus Arcanum
+
+[![Firmware build](https://github.com/mfaltys/midnight_d20/actions/workflows/build.yml/badge.svg)](https://github.com/mfaltys/midnight_d20/actions/workflows/build.yml)
+[![Firmware flasher](https://img.shields.io/badge/%F0%9F%94%A5%20Flasher-mfaltys.github.io%2Fmidnight__d20-green.svg)](https://mfaltys.github.io/midnight_d20/)
+[![ATtiny1614](https://img.shields.io/badge/ATtiny1614-tinyAVR-0FA0CE?labelColor=333&logo=microchip&logoColor=white)]()
+
+**Flash the firmware directly from your browser → mfaltys.github.io/midnight_d20**
+
+</div>
+
+## Overview
+
+A pocket-sized electronic dice roller
 
 It runs on an ATtiny1614 with all thirteen LEDs Charlieplexed onto just five pins,
-so the whole thing fits on a single CR2032 and sips power between rolls.
+so the whole thing fits on a single CR2032 and sips power between rolls. Need to
+load new firmware? Use the hosted
+[web flasher](https://mfaltys.github.io/midnight_d20/)
 
-## Features
-
-- **Seven dice** — d2, d4, d6, d8, d10, d12 and d20, cycled with a short press.
-- **Hold to roll** — a long press winds the chase up around the ring; let go and it
-  always finishes the lap before revealing the result, so a roll is never cut off
-  mid-circle.
-- **Natural 20 celebration** — roll a perfect 20 on the d20 and it spins up a fast
-  spiral with the status LED strobing before the crit lands.
-- **Power flourishes** — the ring spirals to life when you wake it, and collapses
-  again on the way to sleep.
-- **Sleeps deeply** — after about 45 seconds idle, or on a double-click, it powers
-  down and waits for a button press. The die you were using is remembered.
-- **Recovers itself** — a watchdog resets the device automatically if the firmware
-  ever hangs, so a rare glitch clears itself without pulling the cell out.
-- **Fair rolls** — a seeded xorshift32 generator with rejection sampling, so no
-  face is ever favoured.
 
 ## Using it
 
 1. **Wake it.** Press the button; the ring spirals on into die selection.
 2. **Pick a die.** A short press cycles d2 → d4 → d6 → d8 → d10 → d12 → d20. The
    ring shows the die you've landed on.
-3. **Roll.** Press and hold. The chase starts spinning — hold as long as you like,
+3. **Roll.** Press and hold. The chase starts spinning - hold as long as you like,
    then release to let it finish the lap and reveal your number.
 4. **Again or re-pick.** A short press goes back to choosing a die; a long press
    rolls the same die again.
@@ -41,6 +37,57 @@ The ring lights one LED per point, clockwise from the top. The d20 needs a littl
 extra room, so it uses the status LED as a "+10" marker: 17 lights seven LEDs plus
 the status LED, and a natural 20 lights ten LEDs plus the status LED.
 
+## Web flasher
+
+Load new firmware onto your dice roller straight from your browser - no toolchain
+or PlatformIO install needed. Open the flasher at
+**[mfaltys.github.io/midnight_d20](https://mfaltys.github.io/midnight_d20/)** in
+**Chrome, Edge, or Opera** (Web Serial support required):
+
+1. Connect a serialUPDI programmer - the
+   [UPDI programmer adapter (USB-C)](https://www.etsy.com/listing/4591195235/updi-programmer-adapter-usbc)
+   is the one made for this - and click **Connect**. The flasher auto-detects the
+   ATtiny1614 over UPDI, reports the fuses it finds, and lists the available
+   firmware.
+2. Pick a rite and click **Inscribe Device**. The chip is erased, the firmware is
+   written and read back page by page, and the fuses are set to match
+   `platformio.ini` (16 MHz clock, brown-out detector off).
+
+If the ring stays dark afterwards, unplug the UPDI adapter and plug it back in - or
+lift and reseat the coin cell - and the ring will spiral to life.
+
+## Firmware (`src/<name>/`)
+
+| Program | What it does |
+|---|---|
+| `dice` | The roller: die selection, hold-to-roll chase, natural-20 celebration, result, deep sleep |
+| `hwtest` | Bring-up test for a freshly soldered board: walks D1–D13 one LED at a time (400 ms each), then lights the whole ring while the button is held |
+
+## Building from source
+
+The firmware is a [PlatformIO](https://platformio.org/) project (the
+`atmelmegaavr` platform and the Arduino framework via megaTinyCore) with one
+environment per program - the env name **is** the program name:
+
+```sh
+pio run                      # build the dice roller
+pio run -e dice              # build just the dice roller
+pio run -e dice -t upload    # flash it over UPDI
+pio run -e hwtest -t upload  # flash the LED + button bring-up test
+pio run -e dice -t fuses     # run once per blank chip
+```
+
+`platformio.ini` sets `[platformio] default_envs = dice`, so a bare `pio run`
+builds the roller rather than the bring-up test. Run the `fuses` target once per
+blank chip: `upload` only writes flash, and a fresh part powers up on a different
+oscillator setting, which scales every delay. (The [web flasher](#web-flasher)
+writes those fuses for you.)
+
+To add a program, create `src/<name>/main.cpp` and add a matching `[env:<name>]`
+block with `build_src_filter = +<<name>/>` to `platformio.ini`. Pushing to `main`
+builds every environment and republishes the flasher, so a new program shows up in
+the picker on its own.
+
 ## Hardware
 
 | | |
@@ -50,21 +97,7 @@ the status LED, and a natural 20 lights ten LEDs plus the status LED.
 | Display | 12 perimeter LEDs (D1–D12) + 1 status LED (D13) |
 | Input | One active-low button on PA6 |
 | Wiring | All 13 LEDs Charlieplexed across PA1–PA5 |
-
-## Building and flashing
-
-Built with [PlatformIO](https://platformio.org/) (the `atmelmegaavr` platform and
-the Arduino framework via megaTinyCore).
-
-```bash
-pio run -e dice              # build the dice roller
-pio run -e dice -t upload    # flash it over UPDI
-pio run -e hwtest -t upload  # flash the LED + button hardware test
-pio run -e dice -t fuses     # run once per blank chip (clock + brown-out fuses)
-```
-
-A bare `pio run` builds the roller; pass `-e hwtest` when you want the bring-up
-test instead.
+| Programming | UPDI on PA0, over serialUPDI |
 
 ## Project layout
 
@@ -75,10 +108,12 @@ lib/
 src/
   dice/          the dice roller application
   hwtest/        LED walk + button bring-up test
+docs/            the web flasher published to GitHub Pages
 ```
 
-## Going deeper
+## Credits
 
-The full specification, LED mapping and firmware implementation notes live in
-[`spec.md`](spec.md).
-
+The browser flasher's UPDI stack is a TypeScript port of Microchip's
+[pymcuprog](https://github.com/microchip-pic-avr-tools/pymcuprog) by way of
+[WebUPDI](https://github.com/manuelkasper/webupdi) by Manuel Kasper, used under the
+MIT License (see [`docs/serialupdi/LICENSE`](docs/serialupdi/LICENSE)).

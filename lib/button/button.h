@@ -20,8 +20,9 @@
 
 namespace button {
 
-// Debounce window, long-press threshold and double-click window (spec.md:
-// named constants). DOUBLE_CLICK_MS is measured from the release of the first
+// Debounce window, long-press threshold and double-click window, each a named
+// constant so the timing behaviour can be tuned in one place.
+// DOUBLE_CLICK_MS is measured from the release of the first
 // short press to the release of the second, so the whole second click must fit
 // inside it. Lowering it makes accidental double-clicks (fast die cycling) less
 // likely at the cost of requiring a snappier double-click.

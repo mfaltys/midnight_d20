@@ -1,0 +1,6 @@
+node_modules/
+dist/
+# firmware/ is staged by .github/workflows/pages.yml from the PlatformIO build
+# output, and copied into the site by Vite. Never commit build products.
+public/firmware/*
+!public/firmware/.gitkeep

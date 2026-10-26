@@ -1,0 +1,140 @@
+name: Deploy web flasher
+
+# The published site ships the firmware, so this workflow is the one that builds
+# it: the hex files in docs/public/firmware/ come from the PlatformIO output of
+# this very commit, which keeps the flasher and the source in lockstep. The
+# pull-request check stays in build.yml.
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - 'docs/**'
+      - 'src/**'
+      - 'lib/**'
+      - 'platformio.ini'
+      - '.github/workflows/pages.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+  actions: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: true
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.x'
+
+      - name: Install PlatformIO
+        run: |
+          python -m pip install --upgrade pip
+          pip install platformio
+
+      # Both environments are named explicitly because platformio.ini sets
+      # [platformio] default_envs = dice, so a bare `pio run` would build the
+      # dice roller only.
+      - name: Build firmware
+        run: pio run -e dice -e hwtest
+
+      # The env name is the program name, so .pio/build/<name>/firmware.hex maps
+      # straight onto the layout the flasher fetches: firmware/<name>/firmware.hex.
+      # Vite copies public/ into the site, so these end up on the same origin as
+      # the page: no bucket, no CORS rule, no versions to keep in sync.
+      - name: Stage firmware for the flasher
+        run: |
+          set -euo pipefail
+          rm -rf docs/public/firmware
+          mkdir -p docs/public/firmware
+          published=0
+          for dir in .pio/build/*/; do
+            name="$(basename "$dir")"
+            hex="${dir}firmware.hex"
+            [ -f "$hex" ] || continue
+            mkdir -p "docs/public/firmware/$name"
+            cp "$hex" "docs/public/firmware/$name/firmware.hex"
+            published=$((published + 1))
+          done
+          if [ "$published" -eq 0 ]; then
+            echo "No firmware.hex files found - nothing was built." >&2
+            exit 1
+          fi
+          echo "Staged $published program(s)."
+          find docs/public/firmware -type f | sort
+
+      # The flasher reads manifest.json to decide what to offer, so a program is
+      # only listed once its hex file is really in the deployment.
+      - name: Write firmware manifest
+        run: |
+          python - <<'PY'
+          import datetime
+          import json
+          import os
+
+          root = 'docs/public/firmware'
+          programs = sorted(
+              name for name in os.listdir(root)
+              if os.path.isfile(os.path.join(root, name, 'firmware.hex'))
+          )
+          manifest = {
+              'generated': datetime.datetime.now(
+                  datetime.timezone.utc).strftime('%Y-%m-%dT%H:%M:%SZ'),
+              'commit': os.environ.get('GITHUB_SHA', '')[:7],
+              'programs': programs,
+          }
+          with open(os.path.join(root, 'manifest.json'), 'w', encoding='utf-8') as handle:
+              json.dump(manifest, handle, indent=2)
+              handle.write('\n')
+          print(json.dumps(manifest))
+          PY
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Build flasher site
+        working-directory: docs
+        run: |
+          npm ci || npm install
+          npm run build
+
+      - name: Setup Pages
+        uses: actions/configure-pages@v5
+
+      # Re-running a failed workflow keeps the same run_id, and the github-pages
+      # artifact from the earlier attempt stays attached to the run. deploy-pages
+      # then aborts with "Multiple artifacts named github-pages", so delete any
+      # stale one before uploading.
+      - name: Remove stale github-pages artifacts from previous attempts
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh api "repos/${{ github.repository }}/actions/runs/${{ github.run_id }}/artifacts" \
+            --jq '.artifacts[] | select(.name == "github-pages") | .id' \
+          | xargs -r -I{} gh api -X DELETE \
+              "repos/${{ github.repository }}/actions/artifacts/{}"
+
+      - name: Upload artifact
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: docs/dist
+
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4

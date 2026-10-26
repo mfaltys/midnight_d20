@@ -8,7 +8,8 @@
  *
  *   charlieplex::setPattern(0x000F, false);   // D1..D4 lit, status LED dark
  *
- * The exact LED table and the driver requirements are in spec.md.
+ * The pin table itself lives in charlieplex.cpp, next to the refresh code that
+ * drives it.
  */
 #ifndef CHARLIEPLEX_H
 #define CHARLIEPLEX_H
@@ -21,7 +22,8 @@ namespace charlieplex {
 constexpr uint8_t PERIMETER_COUNT = 12;
 constexpr uint16_t ALL_PERIMETER = 0x0FFF;
 
-// All 13 LEDs in the same order as the table in spec.md (0 = D1 ... 12 = D13).
+// All 13 LEDs, in the same order as the LEDS table in charlieplex.cpp
+// (0 = D1 ... 12 = D13).
 constexpr uint8_t LED_COUNT = 13;
 constexpr uint8_t STATUS_LED = 12;  // D13
 

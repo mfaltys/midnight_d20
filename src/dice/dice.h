@@ -2,8 +2,7 @@
  * Dice definitions and the mapping from a value to the LEDs that show it.
  *
  * Supported dice and the order the user cycles through them: d2, d4, d6, d8,
- * d10, d12, d20, then back to d2. d100 is deliberately not implemented in this
- * revision (spec.md).
+ * d10, d12, d20, then back to d2. d100 is deliberately not implemented.
  */
 #ifndef DICE_H
 #define DICE_H
