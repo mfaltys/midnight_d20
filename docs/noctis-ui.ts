@@ -1,5 +1,5 @@
 /**
- * Noctus Arcanum web flasher - UI controller.
+ * Noctis Arcanum web flasher - UI controller.
  *
  * Talks serialUPDI to the ATtiny1614 through the Web Serial API: bind the
  * adapter, pick a firmware program, and inscribe it. The UPDI stack under
@@ -51,6 +51,8 @@ interface FirmwareProgram {
   blurb: string;
   /** Bring-up firmware rather than the shipping application. */
   diagnostic?: boolean;
+  /** When CI built this hex (ISO 8601, UTC), when the manifest knows. */
+  built?: string;
 }
 
 /** Manifest written by CI next to the firmware it published. */
@@ -58,6 +60,11 @@ interface FirmwareManifest {
   generated?: string;
   commit?: string;
   programs?: string[];
+  /**
+   * Per-program build times, keyed by program id. Optional: manifests written
+   * before this existed only carry `generated`, which stands in for all of them.
+   */
+  firmware?: Record<string, { built?: string } | undefined>;
 }
 
 /**
@@ -69,14 +76,14 @@ const CATALOG: FirmwareProgram[] = [
     id: 'dice',
     name: 'The Dice Roller',
     blurb:
-      'The finished oracle. Short press cycles d2 through d20, hold to wind up a roll, ' +
+      'Default dice firmware. Short press cycles d2 through d20, hold to wind up a roll, ' +
       'double-click to sleep.'
   },
   {
     id: 'hwtest',
     name: 'Hardware Test',
     blurb:
-      'Bench rite for a freshly soldered board: walks D1 to D13 one LED at a time, then ' +
+      'Hardware bench test for a freshly assembled PCB: walks D1 to D13 one LED at a time, then ' +
       'lights the whole ring while the button is held.',
     diagnostic: true
   }
@@ -88,9 +95,42 @@ let attached: AttachedDevice | null = null;
 let programs: FirmwareProgram[] = [];
 let firmware: { program: FirmwareProgram; data: Uint8Array } | null = null;
 let busy = false;
+/** Commit the archive was built from, for the picker's tooltips. */
+let archiveCommit = '';
 /* Set once from initializeUI(); updateButtons() keeps the Connect button dead on
    a browser that has no Web Serial, however many times it runs. */
 let serialSupported = false;
+
+/* --- Firmware picker --------------------------------------------------------
+   A native <select> paints the selected option's text in the closed control as
+   well, so there is nowhere to put a build date that shows only while the list
+   is dropped. This is a listbox instead: the trigger carries the program name,
+   the rows carry the name and the date. Focus never leaves the trigger - the
+   active row is tracked with aria-activedescendant, per the combobox pattern. */
+let pickerOpen = false;
+let pickerActive = -1;
+let selectedProgramId = '';
+
+interface PickerParts {
+  picker: HTMLElement | null;
+  trigger: HTMLButtonElement | null;
+  list: HTMLUListElement | null;
+  value: HTMLSpanElement | null;
+}
+
+function pickerParts(): PickerParts {
+  return {
+    picker: getElement<HTMLElement>('firmware-picker'),
+    trigger: getElement<HTMLButtonElement>('firmware-trigger'),
+    list: getElement<HTMLUListElement>('firmware-list'),
+    value: getElement<HTMLSpanElement>('firmware-value')
+  };
+}
+
+/** Rows of the open list, in order. */
+function pickerRows(list: HTMLUListElement): HTMLElement[] {
+  return Array.from(list.children) as HTMLElement[];
+}
 
 function formatHex(value: number, padLength: number = 4): string {
   return `0x${value.toString(16).padStart(padLength, '0').toUpperCase()}`;
@@ -181,12 +221,15 @@ function checkConnected(): void {
 function updateButtons(): void {
   const connectBtn = getElement<HTMLButtonElement>('btn-connect');
   const disconnectBtn = getElement<HTMLButtonElement>('btn-disconnect');
-  const select = getElement<HTMLSelectElement>('firmware-select');
+  const trigger = getElement<HTMLButtonElement>('firmware-trigger');
   const flashBtn = getElement<HTMLButtonElement>('btn-flash');
 
   if (connectBtn) connectBtn.disabled = busy || !serialSupported || app !== null;
   if (disconnectBtn) disconnectBtn.disabled = busy || app === null;
-  if (select) select.disabled = busy || programs.length === 0;
+  if (trigger) {
+    trigger.disabled = busy || programs.length === 0;
+    if (trigger.disabled) closePicker();
+  }
   if (flashBtn) flashBtn.disabled = busy || app === null || firmware === null;
 }
 
@@ -209,6 +252,9 @@ function prettyName(id: string): string {
  */
 async function loadPrograms(): Promise<void> {
   let ids: string[] = [];
+  /* Per-program build time when the manifest carries one, otherwise the single
+     stamp CI wrote for the whole archive. */
+  let builtFor = (_id: string): string | undefined => undefined;
 
   try {
     const response = await fetch(`${FIRMWARE_ROOT}/${MANIFEST_FILE}`, { cache: 'no-cache' });
@@ -223,6 +269,9 @@ async function loadPrograms(): Promise<void> {
       throw new Error('the manifest lists no programs');
     }
 
+    archiveCommit = manifest.commit ?? '';
+    builtFor = (id) => manifest.firmware?.[id]?.built ?? manifest.generated;
+
     log(
       `Archive holds ${ids.length} rite(s)${manifest.commit ? `, built from ${manifest.commit}` : ''}`,
       'success'
@@ -233,49 +282,139 @@ async function loadPrograms(): Promise<void> {
     log(`Could not read the firmware manifest: ${handleError(error, 'unknown error')}`, 'warn');
     log('Falling back to the built-in catalogue; flashing will 404 if firmware is not staged', 'warn');
     programs = [...CATALOG];
-    populateFirmwareSelect();
+    populateFirmwarePicker();
     return;
   }
 
-  const ordered = CATALOG.filter((program) => ids.includes(program.id));
+  const ordered = CATALOG.filter((program) => ids.includes(program.id)).map((program) => ({
+    ...program,
+    built: builtFor(program.id)
+  }));
   const extra = ids
     .filter((id) => !CATALOG.some((program) => program.id === id))
     .sort()
     .map((id) => ({
       id,
       name: prettyName(id),
-      blurb: 'Published by the build; no description on file.'
+      blurb: 'Published by the build; no description on file.',
+      built: builtFor(id)
     }));
 
   programs = [...ordered, ...extra];
-  populateFirmwareSelect();
+  populateFirmwarePicker();
 }
 
-function populateFirmwareSelect(): void {
-  const select = getElement<HTMLSelectElement>('firmware-select');
-  if (!select) return;
+/** The name shown in the trigger and in the list, without any build date. */
+function programLabel(program: FirmwareProgram): string {
+  return program.diagnostic ? `${program.name} (bench test)` : program.name;
+}
 
-  select.innerHTML = '';
+/** "2026-10-26T17:30:05Z" -> "26 Oct 2026", in UTC so it reads the same anywhere. */
+function formatBuilt(iso: string | undefined): string {
+  if (!iso) return '';
+  const when = new Date(iso);
+  if (Number.isNaN(when.getTime())) return '';
+  return new Intl.DateTimeFormat('en-GB', {
+    day: '2-digit',
+    month: 'short',
+    year: 'numeric',
+    timeZone: 'UTC'
+  }).format(when);
+}
 
-  const placeholder = document.createElement('option');
-  placeholder.value = '';
-  placeholder.textContent = '-- choose a rite --';
-  select.appendChild(placeholder);
+function populateFirmwarePicker(): void {
+  const { list, value } = pickerParts();
+  if (!list) return;
+
+  list.innerHTML = '';
 
   for (const program of programs) {
-    const option = document.createElement('option');
-    option.value = program.id;
-    option.textContent = program.diagnostic ? `${program.name} (bench test)` : program.name;
-    select.appendChild(option);
+    const row = document.createElement('li');
+    row.className = 'picker-option';
+    row.id = `firmware-option-${program.id}`;
+    row.dataset.id = program.id;
+    row.setAttribute('role', 'option');
+    row.setAttribute('aria-selected', 'false');
+
+    const name = document.createElement('span');
+    name.className = 'name';
+    name.textContent = programLabel(program);
+    row.appendChild(name);
+
+    // The date only ever exists inside the open list: the trigger shows the name
+    // alone, so the closed control stays clean.
+    const when = document.createElement('span');
+    when.className = 'when';
+    when.textContent = formatBuilt(program.built);
+    if (when.textContent) row.appendChild(when);
+
+    if (program.built) {
+      row.title = `Built ${program.built}${archiveCommit ? ` from ${archiveCommit}` : ''}`;
+    }
+
+    list.appendChild(row);
   }
 
   // The dice roller is what a device owner wants, so select it up front and the
   // Inscribe button lights up the moment the adapter is bound.
   const preferred = programs.find((program) => program.id === 'dice') ?? programs[0];
   if (preferred) {
-    select.value = preferred.id;
-    void loadFirmware(preferred.id);
+    chooseProgram(preferred.id);
+  } else if (value) {
+    value.textContent = '\u2014 no firmware published \u2014';
   }
+}
+
+function setPickerActive(index: number): void {
+  const { trigger, list } = pickerParts();
+  if (!trigger || !list) return;
+
+  const rows = pickerRows(list);
+  if (rows.length === 0) return;
+
+  pickerActive = Math.min(Math.max(index, 0), rows.length - 1);
+  rows.forEach((row, i) => row.classList.toggle('active', i === pickerActive));
+  trigger.setAttribute('aria-activedescendant', rows[pickerActive].id);
+  rows[pickerActive].scrollIntoView({ block: 'nearest' });
+}
+
+function openPicker(): void {
+  const { trigger, list } = pickerParts();
+  if (!trigger || !list || trigger.disabled || pickerOpen) return;
+
+  pickerOpen = true;
+  list.hidden = false;
+  trigger.setAttribute('aria-expanded', 'true');
+
+  const selected = programs.findIndex((program) => program.id === selectedProgramId);
+  setPickerActive(selected < 0 ? 0 : selected);
+}
+
+function closePicker(): void {
+  const { trigger, list } = pickerParts();
+  if (!trigger || !list || !pickerOpen) return;
+
+  pickerOpen = false;
+  list.hidden = true;
+  trigger.setAttribute('aria-expanded', 'false');
+  trigger.removeAttribute('aria-activedescendant');
+  pickerRows(list).forEach((row) => row.classList.remove('active'));
+}
+
+function chooseProgram(id: string): void {
+  const { list, value } = pickerParts();
+  const program = programs.find((entry) => entry.id === id);
+
+  selectedProgramId = id;
+  if (value) value.textContent = program ? programLabel(program) : id;
+  if (list) {
+    pickerRows(list).forEach((row) =>
+      row.setAttribute('aria-selected', String(row.dataset.id === id))
+    );
+  }
+
+  closePicker();
+  void loadFirmware(id);
 }
 
 function setLore(id: string, text: string, tone: '' | 'good' | 'bad' = ''): void {
@@ -443,7 +582,7 @@ async function identifyDevice(): Promise<AttachedDevice> {
   const match = Object.entries(UPDI_DEVICES).find(([, info]) => info.device_id === deviceId);
   if (!match) {
     throw new Error(
-      `Unknown device ID ${formatHex(deviceId, 6)} - Noctus Arcanum runs on an ATtiny1614`
+      `Unknown device ID ${formatHex(deviceId, 6)} - Noctis Arcanum runs on an ATtiny1614`
     );
   }
 
@@ -703,7 +842,7 @@ export function initializeUI(): void {
   const connectBtn = getElement<HTMLButtonElement>('btn-connect');
   const disconnectBtn = getElement<HTMLButtonElement>('btn-disconnect');
   const flashBtn = getElement<HTMLButtonElement>('btn-flash');
-  const select = getElement<HTMLSelectElement>('firmware-select');
+  const { picker, trigger, list } = pickerParts();
   const clearBtn = getElement<HTMLButtonElement>('btn-clear-log');
   const hint = getElement<HTMLParagraphElement>('serial-hint');
 
@@ -746,18 +885,72 @@ export function initializeUI(): void {
     });
   }
 
-  if (select) {
-    select.addEventListener('change', async (event) => {
-      const id = (event.target as HTMLSelectElement).value;
-      if (!id) {
-        firmware = null;
-        describeFirmware();
-        updateButtons();
+  if (trigger) {
+    trigger.addEventListener('click', () => {
+      if (pickerOpen) closePicker();
+      else openPicker();
+    });
+
+    // The trigger owns the keyboard: Escape/Tab close, arrows open and move the
+    // active row, Enter/Space commit. preventDefault also stops the button from
+    // synthesising a click of its own on Space/Enter, which would re-toggle.
+    trigger.addEventListener('keydown', (event: KeyboardEvent) => {
+      if (event.key === 'Escape') {
+        if (pickerOpen) {
+          event.preventDefault();
+          closePicker();
+        }
         return;
       }
-      await loadFirmware(id);
+      if (event.key === 'Tab') {
+        closePicker();
+        return;
+      }
+      if (event.key === 'ArrowDown' || event.key === 'ArrowUp') {
+        event.preventDefault();
+        if (!pickerOpen) {
+          openPicker();
+        } else {
+          setPickerActive(pickerActive + (event.key === 'ArrowDown' ? 1 : -1));
+        }
+        return;
+      }
+      if (event.key === 'Home' || event.key === 'End') {
+        if (pickerOpen) {
+          event.preventDefault();
+          setPickerActive(event.key === 'Home' ? 0 : programs.length - 1);
+        }
+        return;
+      }
+      if (event.key === 'Enter' || event.key === ' ') {
+        event.preventDefault();
+        if (!pickerOpen) {
+          openPicker();
+        } else {
+          const id = programs[pickerActive]?.id;
+          if (id) chooseProgram(id);
+        }
+      }
     });
   }
+
+  if (list) {
+    // Rows must not take focus from the trigger, so the mousedown that would
+    // move it is suppressed and the click is handled instead.
+    list.addEventListener('mousedown', (event) => event.preventDefault());
+    list.addEventListener('click', (event) => {
+      const row = (event.target as HTMLElement).closest<HTMLElement>('.picker-option');
+      const id = row?.dataset.id;
+      if (id) chooseProgram(id);
+    });
+  }
+
+  // A click anywhere else closes the list, the way a native select behaves.
+  document.addEventListener('mousedown', (event) => {
+    if (pickerOpen && picker && !picker.contains(event.target as Node)) {
+      closePicker();
+    }
+  });
 
   if (flashBtn) {
     flashBtn.addEventListener('click', async () => {
@@ -785,7 +978,7 @@ export function initializeUI(): void {
 
   updateButtons();
   setStatus('disconnected');
-  log('Noctus Arcanum flasher ready', 'step');
+  log('Noctis Arcanum flasher ready', 'step');
 
   // Fire and forget: the picker fills in as soon as the archive answers.
   void loadPrograms();

@@ -91,11 +91,23 @@ jobs:
               name for name in os.listdir(root)
               if os.path.isfile(os.path.join(root, name, 'firmware.hex'))
           )
+          # Each program's date is when its hex was written, i.e. when that
+          # environment was built. The flasher shows these in the firmware
+          # picker, so they come from the hex rather than from this write.
+          firmware = {
+              name: {
+                  'built': datetime.datetime.fromtimestamp(
+                      os.path.getmtime(os.path.join(root, name, 'firmware.hex')),
+                      datetime.timezone.utc).strftime('%Y-%m-%dT%H:%M:%SZ'),
+              }
+              for name in programs
+          }
           manifest = {
               'generated': datetime.datetime.now(
                   datetime.timezone.utc).strftime('%Y-%m-%dT%H:%M:%SZ'),
               'commit': os.environ.get('GITHUB_SHA', '')[:7],
               'programs': programs,
+              'firmware': firmware,
           }
           with open(os.path.join(root, 'manifest.json'), 'w', encoding='utf-8') as handle:
               json.dump(manifest, handle, indent=2)

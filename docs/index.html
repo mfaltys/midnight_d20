@@ -3,9 +3,9 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <meta name="description" content="Inscribe Noctus Arcanum firmware onto your dice roller straight from your browser - no toolchain required.">
+    <meta name="description" content="Inscribe Noctis Arcanum firmware onto your dice roller straight from your browser - no toolchain required.">
     <meta name="theme-color" content="#08060d">
-    <title>Noctus Arcanum | Firmware Rite</title>
+    <title>Noctis Arcanum | Firmware Rite</title>
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@400;600;700&family=EB+Garamond:ital,wght@0,400;0,500;1,400&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
@@ -17,17 +17,17 @@
             <div class="hero-text">
                 <p class="sigil-line">
                     <span class="rule"></span>
-                    Noctus Arcanum &middot; Midnight CAD
+                    Noctis Arcanum &middot; Midnight CAD
                     <span class="rule"></span>
                 </p>
-                <h1>Noctus<em>Arcanum</em></h1>
+                <h1>Noctis<em>Arcanum</em></h1>
                 <p class="subtitle">Arcane Capacitor</p>
             </div>
 
             <div class="hero-glyph">
                 <!-- Face-on technical drawing of the board, traced from the panel
                      artwork (public/board.svg): gold on transparent. -->
-                <img src="./board.svg" alt="Technical drawing of the Noctus Arcanum circuit board" width="631" height="725">
+                <img src="./board.svg" alt="Technical drawing of the Noctis Arcanum circuit board" width="631" height="725">
             </div>
         </header>
 
@@ -65,10 +65,15 @@
                     <section class="chapter">
                         <h2><span class="rune"><span>II</span></span> Choose the Rite</h2>
 
-                        <label class="field-label" for="firmware-select">Firmware scroll</label>
-                        <select id="firmware-select" disabled>
-                            <option value="">&mdash; reading the archive &mdash;</option>
-                        </select>
+                        <label class="field-label" id="firmware-label" for="firmware-trigger">Firmware package</label>
+                        <div class="picker" id="firmware-picker">
+                            <button class="picker-trigger" id="firmware-trigger" type="button"
+                                    role="combobox" aria-haspopup="listbox" aria-expanded="false"
+                                    aria-controls="firmware-list" disabled>
+                                <span class="picker-value" id="firmware-value">&mdash; reading the archive &mdash;</span>
+                            </button>
+                            <ul class="picker-list" id="firmware-list" role="listbox" tabindex="-1" hidden></ul>
+                        </div>
 
                         <p class="rite-blurb" id="firmware-blurb"></p>
                     </section>
@@ -136,7 +141,7 @@
         </section>
 
         <footer class="footer">
-            <span>Noctus Arcanum firmware rite</span>
+            <span>Noctis Arcanum firmware rite</span>
             <span class="footer-credit">
                 UPDI code from <a href="https://github.com/manuelkasper/webupdi" target="_blank" rel="noreferrer">WebUPDI</a>
                 by Manuel Kasper (MIT)
@@ -153,7 +158,7 @@
     </noscript>
 
     <script type="module">
-        import { initializeUI } from './noctus-ui.ts';
+        import { initializeUI } from './noctis-ui.ts';
 
         window.addEventListener('load', () => {
             initializeUI();

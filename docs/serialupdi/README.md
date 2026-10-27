@@ -6,7 +6,7 @@ port of Microchip's [pymcuprog](https://github.com/microchip-pic-avr-tools/pymcu
 `serialupdi` module. The code in this directory is a verbatim copy of the
 `serialupdi/` directory from WebUPDI, with only comment changes.
 
-The ATtiny1614 in Noctus Arcanum uses NVM revision P:0, so the stack drives
+The ATtiny1614 in Noctis Arcanum uses NVM revision P:0, so the stack drives
 `nvmp0.ts` through the 16-bit datalink in `link.ts`.
 
 Licensed under the MIT License, Copyright (c) 2025 Microchip Technology Inc. and

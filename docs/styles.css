@@ -1,4 +1,4 @@
-/* Noctus Arcanum - web flasher.
+/* Noctis Arcanum - web flasher.
    Obsidian and gold, arcane violet in the shadows: Cinzel for the headings,
    EB Garamond for prose, IBM Plex Mono for anything the machine says. */
 
@@ -130,7 +130,7 @@ h1 em {
 .lede strong { color: var(--ink); font-weight: 500; }
 
 /* Board glyph -------------------------------------------------------------- */
-.hero-glyph { position: relative; flex: none; width: clamp(160px, 25vw, 262px); }
+.hero-glyph { position: relative; flex: none; width: clamp(150px, 19vw, 205px); }
 /* public/board.svg is a traced technical drawing of the panel: gold on a
    transparent background, with its own gradient and glow baked in, so it wants
    nothing from this stylesheet beyond a box to sit in. */
@@ -298,7 +298,16 @@ button { font: inherit; cursor: pointer; }
   text-transform: uppercase;
 }
 
-select {
+/* Picker ------------------------------------------------------------------- */
+/* The firmware scroll is a listbox rather than a <select> because the build date
+   has to appear in the open list only: a native select paints the selected
+   option's text in the closed control as well, so there is nowhere to hide it.
+   The trigger keeps the closed look the old select had. */
+.picker { position: relative; }
+
+.picker-trigger {
+  display: flex;
+  align-items: center;
   width: 100%;
   min-height: 48px;
   padding: 0 40px 0 14px;
@@ -314,11 +323,62 @@ select {
   color: var(--parchment);
   font-family: 'EB Garamond', Georgia, serif;
   font-size: 16px;
-  appearance: none;
+  text-align: left;
 }
-select:focus { outline: none; border-color: var(--gold); box-shadow: 0 0 0 1px var(--hairline); }
-select:disabled { cursor: not-allowed; opacity: .5; }
-select option { background: var(--void-2); color: var(--parchment); }
+.picker-trigger:hover:not(:disabled) { border-color: var(--gold); }
+.picker-trigger:focus-visible,
+.picker-trigger[aria-expanded='true'] {
+  outline: none;
+  border-color: var(--gold);
+  box-shadow: 0 0 0 1px var(--hairline);
+}
+.picker-trigger:disabled { cursor: not-allowed; opacity: .5; }
+.picker-value { overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+
+/* The list floats over the panel: it is longer than the trigger and must not
+   push the rest of the form around. */
+.picker-list {
+  position: absolute;
+  z-index: 20;
+  top: calc(100% + 6px);
+  right: 0;
+  left: 0;
+  max-height: 15em;
+  margin: 0;
+  padding: 5px;
+  overflow-y: auto;
+  border: 1px solid var(--hairline);
+  /* Opaque, unlike the panel: the list floats over the blurb text and must hide
+     whatever it covers. */
+  background-color: var(--void-2);
+  background-image: linear-gradient(158deg, var(--panel-1), var(--panel-2));
+  box-shadow: 0 22px 44px -22px #000, inset 0 1px 0 rgba(240, 212, 136, .06);
+  list-style: none;
+}
+
+.picker-option {
+  display: flex;
+  align-items: baseline;
+  gap: 12px;
+  padding: 9px 12px;
+  color: var(--ink);
+  cursor: pointer;
+}
+.picker-option[aria-selected='true'] { color: var(--gold-bright); }
+.picker-option.active {
+  background: rgba(201, 162, 39, .1);
+  box-shadow: inset 2px 0 0 var(--gold);
+}
+/* The build date lives here and nowhere else: it is only in the open list. */
+.picker-option .when {
+  margin-left: auto;
+  color: var(--faint);
+  font-family: 'IBM Plex Mono', ui-monospace, monospace;
+  font-size: 11px;
+  letter-spacing: .06em;
+  white-space: nowrap;
+}
+.picker-option[aria-selected='true'] .when { color: var(--gold-dim); }
 
 .rite-blurb {
   margin: 12px 0 16px;

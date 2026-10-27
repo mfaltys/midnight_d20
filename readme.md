@@ -1,6 +1,6 @@
 <div align="center">
 
-# Noctus Arcanum
+# Noctis Arcanum
 
 [![Firmware build](https://github.com/mfaltys/midnight_d20/actions/workflows/build.yml/badge.svg)](https://github.com/mfaltys/midnight_d20/actions/workflows/build.yml)
 [![Firmware flasher](https://img.shields.io/badge/%F0%9F%94%A5%20Flasher-mfaltys.github.io%2Fmidnight__d20-green.svg)](https://mfaltys.github.io/midnight_d20/)

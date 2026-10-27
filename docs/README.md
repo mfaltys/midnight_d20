@@ -1,4 +1,4 @@
-# docs/ — the Noctus Arcanum web flasher
+# docs/ — the Noctis Arcanum web flasher
 
 The page published at **https://mfaltys.github.io/midnight_d20/**. It talks
 serialUPDI to the ATtiny1614 through the Web Serial API, so firmware can be
@@ -8,7 +8,7 @@ flashed from a browser with nothing installed.
 
 | Path | What it is |
 |---|---|
-| `index.html`, `styles.css`, `noctus-ui.ts` | the page: markup, theme, controller |
+| `index.html`, `styles.css`, `noctis-ui.ts` | the page: markup, theme, controller |
 | `devices.ts`, `intel-hex-parser.ts`, `serialupdi/` | the UPDI stack, ported from WebUPDI (see `serialupdi/README.md` and `serialupdi/LICENSE`) |
 | `public/board.svg` | the hero glyph: a technical drawing of the panel, gold on transparent |
 | `public/firmware/<env>/firmware.hex` | staged by CI, gitignored, copied into the build by Vite |
@@ -36,11 +36,11 @@ cp .pio/build/dice/firmware.hex docs/public/firmware/dice/
 
 `.github/workflows/pages.yml` builds every `[env:*]`, stages each
 `.pio/build/<env>/firmware.hex` as `public/firmware/<env>/firmware.hex`, writes a
-`manifest.json` listing what it published, runs `npm run build`, and deploys
-`docs/dist` with `actions/deploy-pages`.
+`manifest.json` listing what it published and when each program was built, runs
+`npm run build`, and deploys `docs/dist` with `actions/deploy-pages`.
 
 Firmware is served from the site's own origin, so there is no bucket and no CORS
-rule to maintain. `noctus-ui.ts` reads `manifest.json` to decide what to offer, so
+rule to maintain. `noctis-ui.ts` reads `manifest.json` to decide what to offer, so
 a new `[env:*]` in `platformio.ini` shows up in the picker on the next deploy.
 
 Two settings have to match that: the repository must be public, and **Settings →
