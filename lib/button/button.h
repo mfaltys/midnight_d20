@@ -22,12 +22,16 @@ namespace button {
 
 // Debounce window, long-press threshold and double-click window, each a named
 // constant so the timing behaviour can be tuned in one place.
+// LONG_PRESS_MS is the hold threshold: LONG_PRESS is reported as soon as the
+// button has been held that long. Lowering it makes hold-driven actions (the
+// roll wind-up) start sooner, but keep it comfortably above DOUBLE_CLICK_MS so a
+// deliberate double-click's first hold is not mistaken for a long press.
 // DOUBLE_CLICK_MS is measured from the release of the first
 // short press to the release of the second, so the whole second click must fit
 // inside it. Lowering it makes accidental double-clicks (fast die cycling) less
 // likely at the cost of requiring a snappier double-click.
 constexpr uint16_t DEBOUNCE_MS = 20;
-constexpr uint16_t LONG_PRESS_MS = 600;
+constexpr uint16_t LONG_PRESS_MS = 400;
 constexpr uint16_t DOUBLE_CLICK_MS = 300;
 
 enum class Event : uint8_t {

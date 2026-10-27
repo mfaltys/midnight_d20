@@ -35,7 +35,7 @@ const BODCFG_DISABLED = 0x00;
 /* megaTinyCore's default OSCCFG for this board (atxy4.bootloader.OSCCFG = 0x01),
    i.e. the 16 MHz internal oscillator the firmware is compiled for. A blank chip
    ships on the other fuse value, and every millis()-derived threshold - the
-   600 ms long press, the 300 ms double-click window, the 45 s sleep - would run
+   400 ms long press, the 300 ms double-click window, the 45 s sleep - would run
    25% fast. */
 const OSCCFG_16MHZ = 0x01;
 

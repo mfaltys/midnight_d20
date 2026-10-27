@@ -52,7 +52,7 @@ that is the TypeScript source, not the built site.
 Besides the flash image, the page sets two fuses to match `platformio.ini`:
 
 - **OSCCFG = 0x01** (16 MHz). A blank chip ships on the other setting, and every
-  `millis()`-derived threshold — the 600 ms long press, the 300 ms double-click
+  `millis()`-derived threshold — the 400 ms long press, the 300 ms double-click
   window, the 45 s sleep — would run 25% fast. 0x01 is megaTinyCore's own default
   for this board (`atxy4.bootloader.OSCCFG`) and what `platformio.ini` declares,
   so it matches what `pio run -t fuses` writes.
