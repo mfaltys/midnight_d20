@@ -22,35 +22,12 @@
                 </p>
                 <h1>Noctus<em>Arcanum</em></h1>
                 <p class="subtitle">Arcane Capacitor</p>
-                <p class="lede">
-                    A pocket-sized instrument for those who prefer their fate quantified.
-                </p>
             </div>
 
             <div class="hero-glyph">
-                <!-- Face-on d20: the hexagon silhouette, plus the inverted triangle
-                     whose edge midpoints are exactly the front triangle's vertices. -->
-                <svg viewBox="0 0 200 200" role="img" aria-label="A twenty-sided die">
-                    <defs>
-                        <linearGradient id="d20-face" x1="0" y1="0" x2="0.3" y2="1">
-                            <stop offset="0%" stop-color="#31214d"/>
-                            <stop offset="100%" stop-color="#140e22"/>
-                        </linearGradient>
-                        <filter id="d20-glow" x="-45%" y="-45%" width="190%" height="190%">
-                            <feGaussianBlur stdDeviation="3.2" result="blur"/>
-                            <feMerge>
-                                <feMergeNode in="blur"/>
-                                <feMergeNode in="SourceGraphic"/>
-                            </feMerge>
-                        </filter>
-                    </defs>
-                    <g filter="url(#d20-glow)">
-                        <polygon points="100,56 138.1,122 61.9,122" fill="url(#d20-face)" stroke="#f0d488" stroke-width="2.2" stroke-linejoin="round"/>
-                        <polygon points="23.8,56 176.2,56 100,188" fill="none" stroke="#c9a227" stroke-width="1.1" stroke-linejoin="round" opacity="0.85"/>
-                        <polygon points="100,12 176.2,56 176.2,144 100,188 23.8,144 23.8,56" fill="none" stroke="#c9a227" stroke-width="1.1" stroke-linejoin="round" opacity="0.85"/>
-                        <circle cx="100" cy="62.5" r="2.6" fill="#f0d488"/>
-                    </g>
-                </svg>
+                <!-- Face-on technical drawing of the board, traced from the panel
+                     artwork (public/board.svg): gold on transparent. -->
+                <img src="./board.svg" alt="Technical drawing of the Noctus Arcanum circuit board" width="631" height="725">
             </div>
         </header>
 

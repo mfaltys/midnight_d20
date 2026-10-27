@@ -10,6 +10,7 @@ flashed from a browser with nothing installed.
 |---|---|
 | `index.html`, `styles.css`, `noctus-ui.ts` | the page: markup, theme, controller |
 | `devices.ts`, `intel-hex-parser.ts`, `serialupdi/` | the UPDI stack, ported from WebUPDI (see `serialupdi/README.md` and `serialupdi/LICENSE`) |
+| `public/board.svg` | the hero glyph: a technical drawing of the panel, gold on transparent |
 | `public/firmware/<env>/firmware.hex` | staged by CI, gitignored, copied into the build by Vite |
 | `dist/` | Vite output, gitignored — this is what gets deployed |
 

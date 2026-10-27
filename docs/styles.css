@@ -129,12 +129,12 @@ h1 em {
 .lede { max-width: 52ch; margin: 18px 0 0; color: var(--muted); font-size: 17px; line-height: 1.7; }
 .lede strong { color: var(--ink); font-weight: 500; }
 
-/* d20 glyph ---------------------------------------------------------------- */
-.hero-glyph { position: relative; flex: none; width: clamp(150px, 22vw, 230px); }
-/* The glyph carries its own fills and strokes as presentation attributes: an
-   external stylesheet cannot reliably resolve url(#gradient) references into
-   the document's <defs>, so the SVG styles itself. */
-.hero-glyph svg { display: block; width: 100%; height: auto; overflow: visible; }
+/* Board glyph -------------------------------------------------------------- */
+.hero-glyph { position: relative; flex: none; width: clamp(160px, 25vw, 262px); }
+/* public/board.svg is a traced technical drawing of the panel: gold on a
+   transparent background, with its own gradient and glow baked in, so it wants
+   nothing from this stylesheet beyond a box to sit in. */
+.hero-glyph img { display: block; width: 100%; height: auto; }
 .hero-glyph::before {
   position: absolute;
   inset: -18%;
@@ -456,7 +456,7 @@ select option { background: var(--void-2); color: var(--parchment); }
 @media (max-width: 920px) {
   .panel-grid { grid-template-columns: 1fr; gap: 32px; }
   .hero { grid-template-columns: 1fr; }
-  .hero-glyph { order: -1; width: 150px; margin: 0 auto; }
+  .hero-glyph { order: -1; width: 170px; margin: 0 auto; }
   .log { max-height: 360px; }
 }
 
