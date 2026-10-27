@@ -81,7 +81,9 @@ pio run -e dice -t fuses     # run once per blank chip
 builds the roller rather than the bring-up test. Run the `fuses` target once per
 blank chip: `upload` only writes flash, and a fresh part powers up on a different
 oscillator setting, which scales every delay. (The [web flasher](#web-flasher)
-writes those fuses for you.)
+writes those fuses for you.) 16 MHz is the setting the firmware is built for and
+the animation timings in `src/dice/config.h` are tuned to; the part's maximum
+frequency only reaches 20 MHz above 4.5 V, and a CR2032 sits at 3 V.
 
 To add a program, create `src/<name>/main.cpp` and add a matching `[env:<name>]`
 block with `build_src_filter = +<<name>/>` to `platformio.ini`. Pushing to `main`
